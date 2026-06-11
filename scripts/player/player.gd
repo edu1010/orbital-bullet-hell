@@ -408,6 +408,15 @@ func add_boost_charge(amount: float) -> void:
 			manager.ui.boost_ready_feedback()
 
 
+func refill_all_charges() -> void:
+	extra_charge = extra_shot_charge_max
+	orbital_shield_charge = orbital_shield_charge_max
+	boost_charge = boost_charge_max
+	ready_cue_played = true
+	orbital_shield_ready_cue_played = true
+	boost_ready_cue_played = true
+
+
 func add_kill_charge(source: String, current_combo: float) -> void:
 	var gain: float = kill_charge_bonus
 	var boost_gain: float = boost_kill_charge_bonus

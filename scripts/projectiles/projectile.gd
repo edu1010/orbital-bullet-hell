@@ -51,6 +51,11 @@ func _physics_process(delta: float) -> void:
 		reflector.on_primary_hit(direction)
 		deactivate()
 		return
+	var magnet: ScoreMagnet = manager.find_score_magnet_hit(global_position, hit_radius)
+	if magnet:
+		magnet.on_primary_hit(direction)
+		deactivate()
+		return
 	var enemy: EnemyBase = manager.find_enemy_hit(global_position, hit_radius, true)
 	if enemy:
 		if enemy is BombEnemy:

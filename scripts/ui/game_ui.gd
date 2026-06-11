@@ -18,6 +18,7 @@ var time_label: Label
 var enemy_label: Label
 var overlay: ColorRect
 var overlay_label: Label
+var low_health_rect: ColorRect
 var flash_rect: ColorRect
 var ready_label: Label
 var audio_player: AudioStreamPlayer
@@ -54,6 +55,12 @@ func update_hud(data: Dictionary) -> void:
 	var hp_value: float = float(data.get("hp", 3.0))
 	var hp_max: float = float(data.get("max_hp", 3.0))
 	hp_label.text = "HP: %.1f / %.0f" % [hp_value, hp_max]
+	var low_health: bool = hp_value > 0.0 and hp_value <= hp_max * 0.34
+	if low_health:
+		var pulse: float = (sin(float(Time.get_ticks_msec()) / 145.0) + 1.0) * 0.5
+		low_health_rect.color = Color(1.0, 0.03, 0.015, 0.12 + pulse * 0.12)
+	else:
+		low_health_rect.color = Color(1.0, 0.0, 0.0, 0.0)
 	if data.get("invulnerable", false):
 		hp_label.modulate = Color(1.0, 0.3, 0.25) if int(Time.get_ticks_msec() / 90) % 2 == 0 else Color(1.0, 1.0, 1.0)
 	else:
@@ -151,6 +158,15 @@ func boost_feedback() -> void:
 	ready_label.text = "BOOST"
 
 
+func power_surge_feedback() -> void:
+	flash_color = Color(0.35, 0.95, 1.0, 1.0)
+	flash_timer = 0.82
+	ready_timer = 1.35
+	ready_label.modulate = Color(0.65, 1.0, 0.95, 1.0)
+	ready_label.text = "POWER SURGE"
+	_play_tone(1320.0, 0.16)
+
+
 func _build_ui() -> void:
 	root = Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -227,6 +243,13 @@ func _build_ui() -> void:
 	overlay_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	overlay_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	overlay.add_child(overlay_label)
+
+	low_health_rect = ColorRect.new()
+	low_health_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	low_health_rect.z_index = 12
+	low_health_rect.color = Color(1.0, 0.0, 0.0, 0.0)
+	low_health_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(low_health_rect)
 
 	flash_rect = ColorRect.new()
 	flash_rect.set_anchors_preset(Control.PRESET_FULL_RECT)

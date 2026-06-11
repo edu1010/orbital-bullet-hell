@@ -34,6 +34,11 @@ enum RunState { MENU, PLAYING, PAUSED, GAME_OVER }
 @export var combo_max := 12.0
 @export var score_magnet_drop_chance := 0.035
 
+@export_group("Power Surge")
+@export var score_milestone_step := 10000
+@export var power_surge_time_scale := 0.28
+@export var power_surge_duration_seconds := 2.4
+
 @export_group("Heal Waves")
 @export var heal_wave_duration := 2.4
 @export var heal_wave_start_radius := 2.2
@@ -89,6 +94,8 @@ var kills_this_run := 0
 var kills_in_sample := 0
 var kill_rate_sample_timer := 0.0
 var recent_kill_rate := 0.0
+var next_power_surge_score := 10000
+var power_surge_end_msec := 0
 
 
 func configure(
@@ -115,6 +122,8 @@ func configure(
 
 
 func show_main_menu() -> void:
+	Engine.time_scale = 1.0
+	power_surge_end_msec = 0
 	state = RunState.MENU
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	if ui:
@@ -125,9 +134,12 @@ func show_main_menu() -> void:
 func start_run() -> void:
 	if not player:
 		return
+	Engine.time_scale = 1.0
 	# Pools stay allocated across runs; only active objects are hidden/reset.
 	_deactivate_all()
 	score = 0
+	next_power_surge_score = maxi(1, score_milestone_step)
+	power_surge_end_msec = 0
 	combo = 1.0
 	combo_decay_timer = 0.0
 	survival_time = 0.0
@@ -160,6 +172,8 @@ func toggle_pause() -> void:
 func end_run() -> void:
 	if state == RunState.GAME_OVER:
 		return
+	Engine.time_scale = 1.0
+	power_surge_end_msec = 0
 	state = RunState.GAME_OVER
 	high_score = max(high_score, score)
 	_save_high_score()
@@ -187,6 +201,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	_update_power_surge_state()
 	if not is_playing():
 		return
 	survival_time += delta
@@ -436,7 +451,7 @@ func on_enemy_killed(enemy: EnemyBase, source: String, spawn_pickups: bool = tru
 	kills_this_run += 1
 	kills_in_sample += 1
 	var gain: int = int(round(float(enemy.score_value) * combo))
-	score += gain
+	_add_score(gain)
 	combo = min(combo_max, combo + combo_kill_gain)
 	combo_decay_timer = combo_decay_delay
 	if spawn_pickups:
@@ -460,7 +475,7 @@ func _try_spawn_score_magnet(origin: Vector3) -> void:
 
 
 func collect_shard(value: int) -> void:
-	score += int(round(float(value) * combo))
+	_add_score(int(round(float(value) * combo)))
 	combo = min(combo_max, combo + combo_shard_gain)
 	combo_decay_timer = combo_decay_delay
 	if player:
@@ -471,6 +486,42 @@ func attract_all_shards() -> void:
 	for shard in active_shards:
 		if shard.active:
 			shard.magnetize()
+
+
+func _add_score(amount: int) -> void:
+	if amount <= 0:
+		return
+	score += amount
+	var step: int = maxi(1, score_milestone_step)
+	if next_power_surge_score <= 0:
+		next_power_surge_score = step
+	var should_activate := false
+	while score >= next_power_surge_score:
+		should_activate = true
+		next_power_surge_score += step
+	if should_activate:
+		_activate_power_surge()
+
+
+func _activate_power_surge() -> void:
+	power_surge_end_msec = Time.get_ticks_msec() + int(power_surge_duration_seconds * 1000.0)
+	Engine.time_scale = clamp(power_surge_time_scale, 0.05, 1.0)
+	if player:
+		player.refill_all_charges()
+		player.add_camera_shake(0.22, 0.18)
+		spawn_burst(player.global_position, Color(0.35, 0.95, 1.0), 6.0, 0.55)
+		spawn_laser_ring(player.global_position, -player.get_gravity_down(), 1.2, 14.0, Color(0.6, 1.0, 0.95, 0.95), 0.7, 0.35, 0.018)
+	if ui:
+		ui.power_surge_feedback()
+
+
+func _update_power_surge_state() -> void:
+	if power_surge_end_msec <= 0:
+		return
+	if Time.get_ticks_msec() < power_surge_end_msec:
+		return
+	Engine.time_scale = 1.0
+	power_surge_end_msec = 0
 
 
 func find_enemy_hit(position: Vector3, radius: float, include_bombs := true) -> EnemyBase:
@@ -501,6 +552,16 @@ func find_reflector_hit(position: Vector3, radius: float) -> HealReflector:
 		var hit_radius: float = radius + reflector.body_radius
 		if reflector.global_position.distance_squared_to(position) <= hit_radius * hit_radius:
 			return reflector
+	return null
+
+
+func find_score_magnet_hit(position: Vector3, radius: float) -> ScoreMagnet:
+	for magnet in active_score_magnets:
+		if not magnet.active:
+			continue
+		var hit_radius: float = radius + magnet.body_radius
+		if magnet.global_position.distance_squared_to(position) <= hit_radius * hit_radius:
+			return magnet
 	return null
 
 
@@ -562,6 +623,20 @@ func perform_extra_shot(origin: Vector3, direction: Vector3, beam_radius: float,
 		var reflector_radius: float = beam_radius + reflector.body_radius + (forward_reflector / beam_range) * beam_radius * 0.45
 		if reflector_distance <= reflector_radius:
 			reflector.on_extra_hit()
+	var magnet_snapshot: Array = active_score_magnets.duplicate()
+	for raw_magnet in magnet_snapshot:
+		var magnet: ScoreMagnet = raw_magnet as ScoreMagnet
+		if not magnet or not magnet.active:
+			continue
+		var to_magnet: Vector3 = magnet.global_position - origin
+		var magnet_forward: float = to_magnet.dot(direction)
+		if magnet_forward < -1.0 or magnet_forward > beam_range:
+			continue
+		var magnet_closest: Vector3 = origin + direction * magnet_forward
+		var magnet_distance: float = magnet.global_position.distance_to(magnet_closest)
+		var magnet_radius: float = beam_radius + magnet.body_radius + (magnet_forward / beam_range) * beam_radius * 0.45
+		if magnet_distance <= magnet_radius:
+			magnet.on_extra_hit(direction)
 	if player:
 		player.add_camera_shake(0.24, 0.18)
 	return killed
@@ -652,7 +727,7 @@ func detonate_bomb(bomb: BombEnemy, source: String = "bomb") -> int:
 	var origin: Vector3 = bomb.global_position
 	var radius: float = bomb.explosion_radius
 	bomb.deactivate()
-	score += int(round(float(bomb.score_value) * combo))
+	_add_score(int(round(float(bomb.score_value) * combo)))
 	combo = min(combo_max, combo + combo_kill_gain * 2.0)
 	combo_decay_timer = combo_decay_delay
 	spawn_burst(origin, Color(1.0, 0.42, 0.12), radius * 0.45, 0.58)

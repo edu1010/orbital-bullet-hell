@@ -6,11 +6,16 @@ extends Node3D
 @export var lifetime := 14.0
 @export var hover_amplitude := 0.32
 @export var hover_speed := 2.2
+@export var attract_speed := 34.0
+@export var attract_acceleration := 14.0
+@export var wake_duration := 8.0
 
 var manager: GameManager
 var player: PlayerController
 var active := false
 var age := 0.0
+var wake_timer := 0.0
+var velocity := Vector3.ZERO
 var base_position := Vector3.ZERO
 var visual_root: Node3D
 var ring_root: Node3D
@@ -27,6 +32,8 @@ func activate(_manager: GameManager, _player: PlayerController, spawn_position: 
 	global_position = spawn_position
 	base_position = spawn_position
 	age = 0.0
+	wake_timer = 0.0
+	velocity = Vector3.ZERO
 	active = true
 	visible = true
 	set_physics_process(true)
@@ -51,7 +58,16 @@ func _physics_process(delta: float) -> void:
 	var hover_axis: Vector3 = Vector3.UP
 	if radial.length_squared() > 0.001:
 		hover_axis = -radial.normalized()
-	global_position = base_position + hover_axis * sin(age * hover_speed) * hover_amplitude
+	if wake_timer > 0.0:
+		wake_timer = max(0.0, wake_timer - delta)
+		var to_player: Vector3 = player.global_position - global_position
+		if to_player.length_squared() > 0.01:
+			var desired_velocity: Vector3 = to_player.normalized() * attract_speed
+			velocity = velocity.lerp(desired_velocity, clamp(attract_acceleration * delta, 0.0, 1.0))
+		global_position += velocity * delta
+		base_position = global_position
+	else:
+		global_position = base_position + hover_axis * sin(age * hover_speed) * hover_amplitude
 	if visual_root:
 		visual_root.rotate_y(delta * 1.8)
 		visual_root.rotate_x(delta * 0.65)
@@ -62,6 +78,28 @@ func _physics_process(delta: float) -> void:
 		manager.attract_all_shards()
 		manager.spawn_burst(global_position, Color(0.85, 0.35, 1.0), body_radius * 2.4, 0.32)
 		deactivate()
+
+
+func on_primary_hit(hit_direction: Vector3) -> void:
+	_wake_toward_player(hit_direction, 1.0)
+
+
+func on_extra_hit(hit_direction: Vector3) -> void:
+	_wake_toward_player(hit_direction, 1.35)
+
+
+func _wake_toward_player(hit_direction: Vector3, speed_scale: float) -> void:
+	if not active:
+		return
+	wake_timer = max(wake_timer, wake_duration)
+	if player:
+		var to_player: Vector3 = player.global_position - global_position
+		if to_player.length_squared() > 0.01:
+			velocity = to_player.normalized() * attract_speed * speed_scale
+	if hit_direction.length_squared() > 0.01:
+		velocity += hit_direction.normalized() * 2.0
+	if manager:
+		manager.spawn_burst(global_position, Color(0.9, 0.38, 1.0), body_radius * 1.4, 0.18)
 
 
 func _create_visual() -> void:
