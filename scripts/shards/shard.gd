@@ -4,9 +4,9 @@ extends Node3D
 @export var lifetime := 7.5
 @export var attract_radius := 12.0
 @export var collect_radius := 1.3
-@export var attract_acceleration := 34.0
-@export var magnet_acceleration := 18.0
-@export var magnet_speed := 58.0
+@export var attract_acceleration := 16.0
+@export var magnet_acceleration := 8.5
+@export var magnet_speed := 28.0
 @export var damping := 2.1
 @export var visual_size := 0.52
 @export var pulse_amount := 0.18
