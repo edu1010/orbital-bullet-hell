@@ -539,28 +539,19 @@ func _update_kill_rate(delta: float) -> void:
 func _handle_player_enemy_contacts() -> void:
 	if not player or player.is_dead():
 		return
-	# Contact severity is radial: inner body hit is 1 damage, outer graze is 0.5.
-	var body_position: Vector3 = player.global_position + Vector3(0.0, 0.05, 0.0)
+	var player_hit_point: Vector3 = player.global_position
 	for enemy in active_enemies:
 		if not enemy.active:
 			continue
 		if enemy is BombEnemy:
-			if enemy.global_position.distance_to(body_position) <= (enemy as BombEnemy).contact_radius:
-				player.apply_damage(0.5, enemy.global_position)
+			if enemy.global_position.distance_to(player_hit_point) <= (enemy as BombEnemy).contact_radius:
+				player.apply_damage(player.max_hp, enemy.global_position)
 				detonate_bomb(enemy as BombEnemy, "touch")
 			continue
 		if player.is_enemy_platform_contact(enemy):
 			continue
-		var distance: float = enemy.global_position.distance_to(body_position)
-		var full_radius: float = player.full_hit_radius + enemy.body_radius * 0.62
-		var graze_radius: float = player.graze_radius + enemy.body_radius
-		if distance <= full_radius:
-			if player.apply_damage(1.0, enemy.global_position):
-				enemy.kill("body", false)
-			break
-		elif distance <= graze_radius:
-			if player.apply_damage(0.5, enemy.global_position):
-				player.add_camera_shake(0.12, 0.12)
+		if enemy.global_position.distance_to(player_hit_point) <= enemy.body_radius:
+			player.apply_damage(player.max_hp, enemy.global_position)
 			break
 
 

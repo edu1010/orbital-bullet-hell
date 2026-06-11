@@ -9,19 +9,19 @@ extends CharacterBody3D
 @export var air_acceleration := 11.0
 @export var ground_friction := 12.0
 @export var gravity := 22.0
-@export var jump_force := 12.4
+@export var jump_force := 16.5
 @export var double_jump_count := 1
 @export var enemy_jump_resets := true
 @export var coyote_time := 0.14
 @export var jump_buffer_time := 0.16
-@export var enemy_platform_radius := 0.55
-@export var enemy_jump_probe_distance := 2.25
-@export var enemy_platform_snap_distance := 0.85
+@export var enemy_platform_radius := 1.15
+@export var enemy_jump_probe_distance := 4.0
+@export var enemy_platform_snap_distance := 1.35
 @export var body_half_height := 0.9
 
 @export_group("Spherical Gravity")
 @export var sphere_center := Vector3.ZERO
-@export var sphere_radius := 52.0
+@export var sphere_radius := 38.0
 @export var gravity_lerp_speed := 8.5
 @export var center_flip_lerp_speed := 16.0
 @export var center_flip_dot_threshold := -0.2
@@ -36,28 +36,30 @@ extends CharacterBody3D
 
 @export_group("Health")
 @export var max_hp := 3.0
-@export var full_hit_radius := 0.72
-@export var graze_radius := 1.28
-@export var invulnerability_time := 0.4
+@export var invulnerability_time := 0.24
 
 @export_group("Primary Fire")
-@export var primary_fire_rate := 8.5
+@export var primary_fire_rate := 12.5
 @export var projectile_speed := 62.0
+@export var downward_fire_lift_threshold := 0.42
+@export var downward_fire_lift_impulse := 2.0
+@export var downward_fire_lift_max_speed := 30.0
 
 @export_group("Extra Shot")
 @export var extra_shot_charge_max := 100.0
-@export var passive_charge_rate := 4.0
-@export var kill_charge_bonus := 1.0
-@export var bomb_kill_charge_bonus := 0.25
-@export var combo_charge_bonus_scale := 0.08
+@export var passive_charge_rate := 9.0
+@export var kill_charge_bonus := 2.4
+@export var bomb_kill_charge_bonus := 0.8
+@export var combo_charge_bonus_scale := 0.12
 @export var extra_shot_radius := 5.0
 @export var extra_shot_range := 88.0
+@export var extra_shot_lift_impulse := 8.0
 
 @export_group("Boost")
 @export var boost_charge_max := 100.0
-@export var boost_kill_charge_bonus := 3.2
-@export var boost_bomb_kill_charge_bonus := 0.9
-@export var boost_combo_charge_bonus_scale := 0.05
+@export var boost_kill_charge_bonus := 5.4
+@export var boost_bomb_kill_charge_bonus := 1.6
+@export var boost_combo_charge_bonus_scale := 0.08
 @export var boost_duration := 0.58
 @export var boost_speed_multiplier := 2.25
 @export var boost_acceleration := 38.0
@@ -219,6 +221,8 @@ func _handle_jump_buffer() -> void:
 		return
 	if coyote_timer > 0.0:
 		_do_jump(false)
+	elif _try_enemy_platform_jump():
+		_do_jump(false)
 	elif jumps_remaining > 0:
 		_do_jump(true)
 
@@ -232,6 +236,24 @@ func _do_jump(air_jump: bool) -> void:
 	coyote_timer = 0.0
 	current_platform_enemy = null
 	fov_kick = max(fov_kick, 4.0)
+
+
+func _try_enemy_platform_jump() -> bool:
+	if not enemy_jump_resets or not manager:
+		return false
+	var feet_position: Vector3 = global_position + gravity_down * body_half_height
+	var enemy: EnemyBase = manager.find_enemy_platform(
+		feet_position,
+		gravity_down,
+		enemy_platform_radius * 1.65,
+		enemy_jump_probe_distance * 1.15
+	)
+	if not enemy:
+		return false
+	current_platform_enemy = enemy
+	coyote_timer = coyote_time
+	jumps_remaining = double_jump_count
+	return true
 
 
 func _update_enemy_platform() -> void:
@@ -270,6 +292,7 @@ func _update_auto_fire(delta: float) -> void:
 func _fire_primary() -> void:
 	var direction: Vector3 = -camera.global_transform.basis.z.normalized()
 	manager.request_projectile(muzzle.global_position, direction, projectile_speed)
+	_apply_downward_fire_lift(direction, downward_fire_lift_impulse)
 
 
 func try_fire_extra() -> void:
@@ -277,10 +300,24 @@ func try_fire_extra() -> void:
 		return
 	var direction: Vector3 = -camera.global_transform.basis.z.normalized()
 	manager.perform_extra_shot(camera.global_position, direction, extra_shot_radius, extra_shot_range)
+	_apply_downward_fire_lift(direction, extra_shot_lift_impulse)
 	extra_charge = 0.0
 	ready_cue_played = false
 	fov_kick = max(fov_kick, 12.0)
 	add_camera_shake(0.3, 0.18)
+
+
+func _apply_downward_fire_lift(direction: Vector3, impulse: float) -> void:
+	var downward_alignment: float = direction.normalized().dot(gravity_down)
+	if downward_alignment <= downward_fire_lift_threshold:
+		return
+	var lift_scale: float = inverse_lerp(downward_fire_lift_threshold, 1.0, downward_alignment)
+	var current_up_speed: float = velocity.dot(-gravity_down)
+	var capped_impulse: float = min(impulse * lift_scale, max(0.0, downward_fire_lift_max_speed - current_up_speed))
+	if capped_impulse <= 0.0:
+		return
+	velocity += -gravity_down * capped_impulse
+	fov_kick = max(fov_kick, 3.0)
 
 
 func try_boost() -> void:
@@ -329,15 +366,11 @@ func add_kill_charge(source: String, current_combo: float) -> void:
 	add_boost_charge(boost_gain * boost_combo_bonus)
 
 
-func apply_damage(amount: float, hit_position: Vector3) -> bool:
+func apply_damage(amount: float, _hit_position: Vector3) -> bool:
 	if invulnerability_timer > 0.0 or hp <= 0.0:
 		return false
 	hp = max(0.0, hp - amount)
 	invulnerability_timer = invulnerability_time
-	var away: Vector3 = global_position - hit_position
-	away = away.slide(gravity_down)
-	if away.length_squared() > 0.01:
-		velocity += away.normalized() * 4.0
 	add_camera_shake(0.28 if amount >= 1.0 else 0.16, 0.22)
 	if manager and manager.ui:
 		manager.ui.damage_feedback(amount)

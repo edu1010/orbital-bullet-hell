@@ -11,8 +11,8 @@ var phase := 0.0
 func _ready() -> void:
 	move_speed = 8.0
 	turn_speed = 4.8
-	body_radius = 1.08
-	platform_height = 1.1
+	body_radius = 1.38
+	platform_height = 1.42
 	score_value = 18
 	shard_drop_min = 2
 	shard_drop_max = 5

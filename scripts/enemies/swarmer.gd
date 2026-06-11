@@ -5,8 +5,8 @@ extends EnemyBase
 func _ready() -> void:
 	move_speed = 10.5
 	turn_speed = 8.5
-	body_radius = 0.62
-	platform_height = 0.64
+	body_radius = 0.82
+	platform_height = 0.86
 	score_value = 10
 	shard_drop_min = 1
 	shard_drop_max = 3

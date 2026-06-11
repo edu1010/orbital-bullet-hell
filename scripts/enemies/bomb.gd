@@ -1,9 +1,9 @@
 class_name BombEnemy
 extends EnemyBase
 
-@export var explosion_radius := 13.0
+@export var explosion_radius := 14.5
 @export var shards_per_kill := 2
-@export var contact_radius := 2.35
+@export var contact_radius := 3.1
 @export var hover_amplitude := 0.45
 @export var hover_speed := 1.7
 
@@ -14,8 +14,8 @@ var phase := 0.0
 
 func _ready() -> void:
 	move_speed = 0.0
-	body_radius = 1.75
-	platform_height = 1.58
+	body_radius = 2.15
+	platform_height = 1.95
 	score_value = 40
 	shard_drop_min = 6
 	shard_drop_max = 12
