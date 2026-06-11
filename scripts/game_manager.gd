@@ -14,10 +14,14 @@ enum RunState { MENU, PLAYING, PAUSED, GAME_OVER }
 @export var projectile_pool_initial := 90
 @export var shard_pool_initial := 180
 @export var effect_pool_initial := 36
+@export var laser_beam_pool_initial := 8
+@export var laser_ring_pool_initial := 56
+@export var heal_reflector_pool_initial := 18
 @export var swarmer_pool_initial := 260
 @export var charger_pool_initial := 80
 @export var avoider_pool_initial := 80
 @export var bomb_pool_initial := 16
+@export var max_active_reflectors := 18
 
 @export_group("Scoring")
 @export var shard_base_value := 5
@@ -30,6 +34,9 @@ enum RunState { MENU, PLAYING, PAUSED, GAME_OVER }
 const PROJECTILE_SCENE := preload("res://scenes/projectiles/Projectile.tscn")
 const SHARD_SCENE := preload("res://scenes/shards/Shard.tscn")
 const BURST_SCENE := preload("res://scenes/effects/BurstEffect.tscn")
+const LASER_BEAM_SCENE := preload("res://scenes/effects/LaserBeamEffect.tscn")
+const LASER_RING_SCENE := preload("res://scenes/effects/LaserRingEffect.tscn")
+const HEAL_REFLECTOR_SCENE := preload("res://scenes/pickups/HealReflector.tscn")
 const ENEMY_SCENES := {
 	"swarmer": preload("res://scenes/enemies/Swarmer.tscn"),
 	"charger": preload("res://scenes/enemies/Charger.tscn"),
@@ -51,14 +58,23 @@ var enemies_container: Node3D
 var projectiles_container: Node3D
 var shards_container: Node3D
 var effects_container: Node3D
+var reflectors_container: Node3D
 
 var enemy_pools := {}
 var projectile_pool: Array[PlayerProjectile] = []
 var shard_pool: Array[ScoreShard] = []
 var effect_pool: Array[BurstEffect] = []
+var laser_beam_pool: Array[LaserBeamEffect] = []
+var laser_ring_pool: Array[LaserRingEffect] = []
+var heal_reflector_pool: Array[HealReflector] = []
 var active_enemies: Array[EnemyBase] = []
 var active_projectiles: Array[PlayerProjectile] = []
 var active_shards: Array[ScoreShard] = []
+var active_reflectors: Array[HealReflector] = []
+var kills_this_run := 0
+var kills_in_sample := 0
+var kill_rate_sample_timer := 0.0
+var recent_kill_rate := 0.0
 
 
 func configure(
@@ -68,7 +84,8 @@ func configure(
 	_enemies_container: Node3D,
 	_projectiles_container: Node3D,
 	_shards_container: Node3D,
-	_effects_container: Node3D
+	_effects_container: Node3D,
+	_reflectors_container: Node3D
 ) -> void:
 	player = _player
 	spawn_manager = _spawn_manager
@@ -77,6 +94,7 @@ func configure(
 	projectiles_container = _projectiles_container
 	shards_container = _shards_container
 	effects_container = _effects_container
+	reflectors_container = _reflectors_container
 	_load_high_score()
 	_setup_pools()
 	_update_ui()
@@ -99,6 +117,10 @@ func start_run() -> void:
 	combo = 1.0
 	combo_decay_timer = 0.0
 	survival_time = 0.0
+	kills_this_run = 0
+	kills_in_sample = 0
+	kill_rate_sample_timer = 0.0
+	recent_kill_rate = 0.0
 	state = RunState.PLAYING
 	player.reset_for_run(player.get_default_spawn_position())
 	spawn_manager.reset_for_run()
@@ -158,6 +180,7 @@ func _process(delta: float) -> void:
 		combo_decay_timer -= delta
 	else:
 		combo = max(1.0, combo - combo_decay_rate * delta)
+	_update_kill_rate(delta)
 	_handle_player_enemy_contacts()
 	_update_ui()
 
@@ -174,6 +197,9 @@ func _setup_pools() -> void:
 	_prewarm_pool(projectile_pool, PROJECTILE_SCENE, projectiles_container, projectile_pool_initial)
 	_prewarm_pool(shard_pool, SHARD_SCENE, shards_container, shard_pool_initial)
 	_prewarm_pool(effect_pool, BURST_SCENE, effects_container, effect_pool_initial)
+	_prewarm_pool(laser_beam_pool, LASER_BEAM_SCENE, effects_container, laser_beam_pool_initial)
+	_prewarm_pool(laser_ring_pool, LASER_RING_SCENE, effects_container, laser_ring_pool_initial)
+	_prewarm_pool(heal_reflector_pool, HEAL_REFLECTOR_SCENE, reflectors_container, heal_reflector_pool_initial)
 
 
 func _prewarm_enemy_pool(enemy_type: String, count: int) -> void:
@@ -221,9 +247,16 @@ func _deactivate_all() -> void:
 		shard.deactivate()
 	for effect in effect_pool:
 		effect.deactivate()
+	for beam in laser_beam_pool:
+		beam.deactivate()
+	for ring in laser_ring_pool:
+		ring.deactivate()
+	for reflector in heal_reflector_pool:
+		reflector.deactivate()
 	active_enemies.clear()
 	active_projectiles.clear()
 	active_shards.clear()
+	active_reflectors.clear()
 
 
 func spawn_enemy(enemy_type: String, spawn_position: Vector3) -> EnemyBase:
@@ -279,14 +312,42 @@ func spawn_burst(origin: Vector3, color: Color, burst_scale: float = 1.0, lifeti
 	effect.activate(origin, color, burst_scale, lifetime)
 
 
+func spawn_laser_beam(origin: Vector3, direction: Vector3, length: float, radius: float, color: Color, lifetime: float) -> void:
+	var beam: LaserBeamEffect = _get_from_pool(laser_beam_pool, LASER_BEAM_SCENE, effects_container) as LaserBeamEffect
+	if not beam:
+		return
+	beam.activate(origin, direction, length, radius, color, lifetime)
+
+
+func spawn_laser_ring(origin: Vector3, direction: Vector3, start_radius: float, end_radius: float, color: Color, lifetime: float) -> void:
+	var ring: LaserRingEffect = _get_from_pool(laser_ring_pool, LASER_RING_SCENE, effects_container) as LaserRingEffect
+	if not ring:
+		return
+	ring.activate(origin, direction, start_radius, end_radius, color, lifetime)
+
+
+func spawn_heal_reflector(spawn_position: Vector3) -> HealReflector:
+	if active_reflector_count() >= max_active_reflectors:
+		return null
+	var reflector: HealReflector = _get_from_pool(heal_reflector_pool, HEAL_REFLECTOR_SCENE, reflectors_container, max_active_reflectors) as HealReflector
+	if not reflector:
+		return null
+	reflector.activate(self, player, spawn_position)
+	if not active_reflectors.has(reflector):
+		active_reflectors.append(reflector)
+	return reflector
+
+
 func on_enemy_killed(enemy: EnemyBase, source: String, spawn_pickups: bool = true) -> void:
 	# Kills feed score, combo, shards, and extra-shot charge from one place.
-	var gain := int(round(float(enemy.score_value) * combo))
+	kills_this_run += 1
+	kills_in_sample += 1
+	var gain: int = int(round(float(enemy.score_value) * combo))
 	score += gain
 	combo = min(combo_max, combo + combo_kill_gain)
 	combo_decay_timer = combo_decay_delay
 	if spawn_pickups:
-		var shard_count := randi_range(enemy.shard_drop_min, enemy.shard_drop_max)
+		var shard_count: int = randi_range(enemy.shard_drop_min, enemy.shard_drop_max)
 		spawn_shards(enemy.global_position, shard_count, shard_base_value, 3.1)
 	if player:
 		player.add_kill_charge(source, combo)
@@ -320,6 +381,16 @@ func get_nearby_projectiles(position: Vector3, radius: float) -> Array[PlayerPro
 	return nearby
 
 
+func find_reflector_hit(position: Vector3, radius: float) -> HealReflector:
+	for reflector in active_reflectors:
+		if not reflector.active:
+			continue
+		var hit_radius: float = radius + reflector.body_radius
+		if reflector.global_position.distance_squared_to(position) <= hit_radius * hit_radius:
+			return reflector
+	return null
+
+
 func find_enemy_platform(feet_position: Vector3, gravity_down: Vector3, platform_radius: float) -> EnemyBase:
 	var best_enemy: EnemyBase = null
 	var best_delta := 999.0
@@ -341,12 +412,10 @@ func find_enemy_platform(feet_position: Vector3, gravity_down: Vector3, platform
 
 
 func perform_extra_shot(origin: Vector3, direction: Vector3, beam_radius: float, beam_range: float) -> int:
-	# The extra shot is a widened ray/capsule check, enough for a fast greybox beam.
+	# The extra shot is a widened ray/capsule check with a straight laser visual.
 	var killed := 0
 	var snapshot: Array = active_enemies.duplicate()
-	var end_position := origin + direction * beam_range
-	spawn_burst(origin + direction * min(12.0, beam_range * 0.15), Color(0.55, 0.95, 1.0), beam_radius * 1.2, 0.34)
-	spawn_burst(end_position, Color(0.25, 0.75, 1.0), beam_radius * 1.7, 0.42)
+	_spawn_extra_laser_visual(origin, direction, beam_radius, beam_range)
 	for raw_enemy in snapshot:
 		var enemy: EnemyBase = raw_enemy as EnemyBase
 		if not enemy:
@@ -366,9 +435,38 @@ func perform_extra_shot(origin: Vector3, direction: Vector3, beam_radius: float,
 			else:
 				enemy.kill("extra", true)
 				killed += 1
+	var reflector_snapshot: Array = active_reflectors.duplicate()
+	for raw_reflector in reflector_snapshot:
+		var reflector: HealReflector = raw_reflector as HealReflector
+		if not reflector or not reflector.active:
+			continue
+		var to_reflector: Vector3 = reflector.global_position - origin
+		var forward_reflector: float = to_reflector.dot(direction)
+		if forward_reflector < -1.0 or forward_reflector > beam_range:
+			continue
+		var reflector_closest: Vector3 = origin + direction * forward_reflector
+		var reflector_distance: float = reflector.global_position.distance_to(reflector_closest)
+		var reflector_radius: float = beam_radius + reflector.body_radius + (forward_reflector / beam_range) * beam_radius * 0.45
+		if reflector_distance <= reflector_radius:
+			reflector.on_extra_hit()
 	if player:
 		player.add_camera_shake(0.24, 0.18)
 	return killed
+
+
+func _spawn_extra_laser_visual(origin: Vector3, direction: Vector3, beam_radius: float, beam_range: float) -> void:
+	var laser_color: Color = Color(0.42, 0.93, 1.0, 0.88)
+	spawn_laser_beam(origin + direction * 1.5, direction, beam_range, 0.16, laser_color, 0.2)
+	var ring_count := 13
+	for i in range(ring_count):
+		var t: float = float(i) / float(maxi(1, ring_count - 1))
+		var distance: float = lerp(5.0, beam_range, t)
+		var ring_position: Vector3 = origin + direction * distance
+		var ring_end_radius: float = beam_radius * lerp(0.75, 1.9, t)
+		var ring_lifetime: float = lerp(0.28, 0.52, t)
+		spawn_laser_ring(ring_position, direction, 0.22, ring_end_radius, Color(0.55, 0.98, 1.0, 0.9), ring_lifetime)
+	spawn_burst(origin + direction * min(10.0, beam_range * 0.14), Color(0.55, 0.95, 1.0), beam_radius * 1.0, 0.24)
+	spawn_burst(origin + direction * beam_range, Color(0.25, 0.75, 1.0), beam_radius * 1.55, 0.36)
 
 
 func detonate_bomb(bomb: BombEnemy, source: String = "bomb") -> int:
@@ -414,6 +512,28 @@ func active_shard_count() -> int:
 		if shard.active:
 			count += 1
 	return count
+
+
+func active_reflector_count() -> int:
+	var count := 0
+	for reflector in active_reflectors:
+		if reflector.active:
+			count += 1
+	return count
+
+
+func get_recent_kill_rate() -> float:
+	return recent_kill_rate
+
+
+func _update_kill_rate(delta: float) -> void:
+	kill_rate_sample_timer += delta
+	if kill_rate_sample_timer < 1.0:
+		return
+	var sample_rate: float = float(kills_in_sample) / max(0.001, kill_rate_sample_timer)
+	recent_kill_rate = lerp(recent_kill_rate, sample_rate, 0.35)
+	kills_in_sample = 0
+	kill_rate_sample_timer = 0.0
 
 
 func _handle_player_enemy_contacts() -> void:

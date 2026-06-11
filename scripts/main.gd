@@ -16,6 +16,7 @@ extends Node3D
 @onready var projectiles_container: Node3D = $Pools/Projectiles
 @onready var shards_container: Node3D = $Pools/Shards
 @onready var effects_container: Node3D = $Pools/Effects
+@onready var reflectors_container: Node3D = $Pools/Reflectors
 
 
 func _ready() -> void:
@@ -30,7 +31,8 @@ func _ready() -> void:
 		enemies_container,
 		projectiles_container,
 		shards_container,
-		effects_container
+		effects_container,
+		reflectors_container
 	)
 	spawn_manager.configure(game_manager, player)
 	player.configure(game_manager)

@@ -339,6 +339,18 @@ func apply_damage(amount: float, hit_position: Vector3) -> bool:
 	return true
 
 
+func heal(amount: float) -> void:
+	if amount <= 0.0 or hp <= 0.0:
+		return
+	var old_hp: float = hp
+	hp = min(max_hp, hp + amount)
+	if hp > old_hp:
+		fov_kick = max(fov_kick, 4.0)
+		add_camera_shake(0.08, 0.1)
+		if manager and manager.ui:
+			manager.ui.heal_feedback(hp - old_hp)
+
+
 func is_invulnerable() -> bool:
 	return invulnerability_timer > 0.0
 

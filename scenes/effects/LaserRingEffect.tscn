@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://dqmcc6pw6q5p8"]
+
+[ext_resource type="Script" path="res://scripts/effects/laser_ring_effect.gd" id="1_ring"]
+
+[node name="LaserRingEffect" type="Node3D"]
+script = ExtResource("1_ring")

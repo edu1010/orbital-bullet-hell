@@ -21,6 +21,7 @@ var ready_label: Label
 var audio_player: AudioStreamPlayer
 var flash_timer := 0.0
 var ready_timer := 0.0
+var flash_color: Color = Color(1.0, 0.08, 0.06, 0.0)
 
 
 func configure(_manager: GameManager) -> void:
@@ -35,9 +36,9 @@ func _process(delta: float) -> void:
 	if flash_timer > 0.0:
 		flash_timer -= delta
 		var alpha: float = clamp(flash_timer / 0.24, 0.0, 1.0) * 0.42
-		flash_rect.color = Color(1.0, 0.08, 0.06, alpha)
+		flash_rect.color = Color(flash_color.r, flash_color.g, flash_color.b, alpha)
 	else:
-		flash_rect.color = Color(1.0, 0.08, 0.06, 0.0)
+		flash_rect.color = Color(flash_color.r, flash_color.g, flash_color.b, 0.0)
 	if ready_timer > 0.0:
 		ready_timer -= delta
 		ready_label.modulate.a = clamp(ready_timer / 0.35, 0.0, 1.0)
@@ -93,7 +94,16 @@ func show_state(state: int) -> void:
 
 
 func damage_feedback(_amount: float) -> void:
+	flash_color = Color(1.0, 0.08, 0.06, 1.0)
 	flash_timer = 0.24
+
+
+func heal_feedback(_amount: float) -> void:
+	flash_color = Color(0.25, 1.0, 0.18, 1.0)
+	flash_timer = 0.22
+	ready_timer = 0.35
+	ready_label.modulate.a = 1.0
+	ready_label.text = "HEAL"
 
 
 func extra_ready_feedback() -> void:

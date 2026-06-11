@@ -21,6 +21,8 @@ script = ExtResource("1_main")
 
 [node name="Effects" type="Node3D" parent="Pools"]
 
+[node name="Reflectors" type="Node3D" parent="Pools"]
+
 [node name="GameManager" type="Node" parent="."]
 script = ExtResource("2_manager")
 

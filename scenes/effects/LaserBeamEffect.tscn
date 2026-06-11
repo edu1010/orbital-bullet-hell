@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://dd4h17o1y1tph"]
+
+[ext_resource type="Script" path="res://scripts/effects/laser_beam_effect.gd" id="1_beam"]
+
+[node name="LaserBeamEffect" type="Node3D"]
+script = ExtResource("1_beam")
