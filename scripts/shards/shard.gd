@@ -5,6 +5,8 @@ extends Node3D
 @export var attract_radius := 12.0
 @export var collect_radius := 1.3
 @export var attract_acceleration := 34.0
+@export var magnet_acceleration := 18.0
+@export var magnet_speed := 58.0
 @export var damping := 2.1
 @export var visual_size := 0.52
 @export var pulse_amount := 0.18
@@ -15,6 +17,7 @@ var active := false
 var velocity := Vector3.ZERO
 var age := 0.0
 var value := 5
+var magnetized := false
 var visual: MeshInstance3D
 
 
@@ -30,6 +33,7 @@ func activate(_manager: GameManager, _player: PlayerController, origin: Vector3,
 	velocity = impulse
 	value = shard_value
 	age = 0.0
+	magnetized = false
 	active = true
 	visible = true
 	set_physics_process(true)
@@ -47,7 +51,10 @@ func _physics_process(delta: float) -> void:
 	if manager and not manager.is_playing():
 		return
 	age += delta
-	if age >= lifetime or not player:
+	if age >= lifetime and not magnetized:
+		deactivate()
+		return
+	if not player:
 		deactivate()
 		return
 	var to_player: Vector3 = player.global_position + Vector3(0.0, 0.3, 0.0) - global_position
@@ -57,14 +64,25 @@ func _physics_process(delta: float) -> void:
 		manager.spawn_burst(global_position, Color(0.95, 0.95, 0.35), 0.55, 0.16)
 		deactivate()
 		return
-	if distance <= attract_radius:
+	if magnetized:
+		var desired_velocity: Vector3 = to_player.normalized() * magnet_speed
+		velocity = velocity.lerp(desired_velocity, clamp(magnet_acceleration * delta, 0.0, 1.0))
+	elif distance <= attract_radius:
 		var pull: float = 1.0 - clamp(distance / attract_radius, 0.0, 1.0)
 		velocity += to_player.normalized() * attract_acceleration * pull * delta
-	velocity = velocity.lerp(Vector3.ZERO, clamp(damping * delta, 0.0, 0.8))
+	if not magnetized:
+		velocity = velocity.lerp(Vector3.ZERO, clamp(damping * delta, 0.0, 0.8))
 	global_position += velocity * delta
 	visual.scale = Vector3.ONE * (1.0 + sin(age * 9.0) * pulse_amount)
 	rotate_y(8.0 * delta)
 	rotate_x(5.0 * delta)
+
+
+func magnetize() -> void:
+	if not active:
+		return
+	magnetized = true
+	age = min(age, lifetime * 0.35)
 
 
 func _create_visual() -> void:

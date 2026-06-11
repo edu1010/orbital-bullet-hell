@@ -55,6 +55,15 @@ extends CharacterBody3D
 @export var extra_shot_range := 88.0
 @export var extra_shot_lift_impulse := 8.0
 
+@export_group("Orbital Shield")
+@export var orbital_shield_charge_max := 100.0
+@export var orbital_shield_enemy_jump_charge := 16.0
+@export var orbital_shield_shard_charge_per_point := 0.08
+@export var orbital_shield_radius := 7.4
+@export var orbital_shield_duration := 0.72
+@export var orbital_shield_launch_speed := 92.0
+@export var orbital_shield_gravity_lerp_speed := 44.0
+
 @export_group("Boost")
 @export var boost_charge_max := 100.0
 @export var boost_kill_charge_bonus := 5.4
@@ -72,7 +81,9 @@ extends CharacterBody3D
 var manager: GameManager
 var hp := 3.0
 var extra_charge := 0.0
+var orbital_shield_charge := 0.0
 var boost_charge := 0.0
+var orbital_shield_timer := 0.0
 var boost_timer := 0.0
 var invulnerability_timer := 0.0
 var jump_buffer_timer := 0.0
@@ -86,9 +97,12 @@ var shake_strength := 0.0
 var camera_base_position := Vector3.ZERO
 var current_platform_enemy: EnemyBase
 var ready_cue_played := false
+var orbital_shield_ready_cue_played := false
 var boost_ready_cue_played := false
 var gravity_down := Vector3.DOWN
 var on_gravity_floor := false
+var orbital_shield_visual: MeshInstance3D
+var orbital_shield_material: StandardMaterial3D
 
 
 func configure(_manager: GameManager) -> void:
@@ -103,6 +117,7 @@ func set_spherical_world(center: Vector3, radius: float) -> void:
 func _ready() -> void:
 	camera_base_position = camera.position
 	camera.fov = base_fov
+	_create_orbital_shield_visual()
 	hp = max_hp
 	up_direction = -gravity_down
 	set_physics_process(true)
@@ -116,7 +131,9 @@ func reset_for_run(start_position: Vector3) -> void:
 	velocity = Vector3.ZERO
 	hp = max_hp
 	extra_charge = 0.0
+	orbital_shield_charge = 0.0
 	boost_charge = 0.0
+	orbital_shield_timer = 0.0
 	boost_timer = 0.0
 	invulnerability_timer = 0.0
 	jump_buffer_timer = 0.0
@@ -128,7 +145,10 @@ func reset_for_run(start_position: Vector3) -> void:
 	shake_strength = 0.0
 	current_platform_enemy = null
 	ready_cue_played = false
+	orbital_shield_ready_cue_played = false
 	boost_ready_cue_played = false
+	if orbital_shield_visual:
+		orbital_shield_visual.visible = false
 	on_gravity_floor = true
 	gravity_down = _target_gravity_down()
 	up_direction = -gravity_down
@@ -150,6 +170,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.keycode == KEY_SHIFT:
 			try_boost()
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
+		try_fire_orbital_shield()
+	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		try_fire_extra()
 
 
@@ -158,6 +180,7 @@ func _physics_process(delta: float) -> void:
 		return
 	# Movement and platform detection are intentionally permissive for a floaty feel.
 	boost_timer = max(0.0, boost_timer - delta)
+	_update_orbital_shield(delta)
 	_update_gravity(delta)
 	_update_timers(delta)
 	_apply_arcade_movement(delta)
@@ -220,9 +243,13 @@ func _handle_jump_buffer() -> void:
 	if jump_buffer_timer <= 0.0:
 		return
 	if coyote_timer > 0.0:
+		var was_enemy_jump: bool = current_platform_enemy != null
 		_do_jump(false)
+		if was_enemy_jump:
+			_on_enemy_platform_jump()
 	elif _try_enemy_platform_jump():
 		_do_jump(false)
+		_on_enemy_platform_jump()
 	elif jumps_remaining > 0:
 		_do_jump(true)
 
@@ -307,6 +334,23 @@ func try_fire_extra() -> void:
 	add_camera_shake(0.3, 0.18)
 
 
+func try_fire_orbital_shield() -> void:
+	if orbital_shield_charge < orbital_shield_charge_max:
+		return
+	orbital_shield_charge = 0.0
+	orbital_shield_ready_cue_played = false
+	orbital_shield_timer = orbital_shield_duration
+	var tangent_velocity: Vector3 = velocity.slide(gravity_down) * 0.2
+	velocity = tangent_velocity - gravity_down * orbital_shield_launch_speed
+	fov_kick = max(fov_kick, 22.0)
+	add_camera_shake(0.5, 0.28)
+	if manager:
+		manager.spawn_orbital_shield_visual(global_position, -gravity_down, orbital_shield_radius)
+		manager.perform_orbital_shield(global_position, orbital_shield_radius)
+		if manager.ui:
+			manager.ui.orbital_shield_feedback()
+
+
 func _apply_downward_fire_lift(direction: Vector3, impulse: float) -> void:
 	var downward_alignment: float = direction.normalized().dot(gravity_down)
 	if downward_alignment <= downward_fire_lift_threshold:
@@ -344,6 +388,16 @@ func add_extra_charge(amount: float) -> void:
 			manager.ui.extra_ready_feedback()
 
 
+func add_orbital_shield_charge(amount: float) -> void:
+	if amount <= 0.0 or orbital_shield_charge >= orbital_shield_charge_max:
+		return
+	orbital_shield_charge = min(orbital_shield_charge_max, orbital_shield_charge + amount)
+	if orbital_shield_charge >= orbital_shield_charge_max and not orbital_shield_ready_cue_played:
+		orbital_shield_ready_cue_played = true
+		if manager and manager.ui:
+			manager.ui.orbital_shield_ready_feedback()
+
+
 func add_boost_charge(amount: float) -> void:
 	if amount <= 0.0 or boost_charge >= boost_charge_max:
 		return
@@ -366,8 +420,14 @@ func add_kill_charge(source: String, current_combo: float) -> void:
 	add_boost_charge(boost_gain * boost_combo_bonus)
 
 
+func _on_enemy_platform_jump() -> void:
+	add_orbital_shield_charge(orbital_shield_enemy_jump_charge)
+	if manager:
+		manager.spawn_burst(global_position, Color(0.62, 0.96, 1.0), 1.4, 0.16)
+
+
 func apply_damage(amount: float, _hit_position: Vector3) -> bool:
-	if invulnerability_timer > 0.0 or hp <= 0.0:
+	if orbital_shield_timer > 0.0 or invulnerability_timer > 0.0 or hp <= 0.0:
 		return false
 	hp = max(0.0, hp - amount)
 	invulnerability_timer = invulnerability_time
@@ -406,6 +466,48 @@ func is_enemy_platform_contact(enemy: EnemyBase) -> bool:
 func add_camera_shake(strength: float, duration: float) -> void:
 	shake_strength = max(shake_strength, strength)
 	shake_timer = max(shake_timer, duration)
+
+
+func _create_orbital_shield_visual() -> void:
+	orbital_shield_visual = MeshInstance3D.new()
+	var mesh := SphereMesh.new()
+	mesh.radius = 1.0
+	mesh.height = 2.0
+	mesh.radial_segments = 32
+	mesh.rings = 16
+	orbital_shield_visual.mesh = mesh
+	orbital_shield_material = StandardMaterial3D.new()
+	orbital_shield_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	orbital_shield_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	orbital_shield_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	orbital_shield_material.albedo_color = Color(0.35, 0.95, 1.0, 0.0)
+	orbital_shield_material.emission_enabled = true
+	orbital_shield_material.emission = Color(0.35, 0.95, 1.0, 0.0)
+	orbital_shield_material.emission_energy_multiplier = 2.4
+	orbital_shield_visual.material_override = orbital_shield_material
+	orbital_shield_visual.visible = false
+	add_child(orbital_shield_visual)
+
+
+func _update_orbital_shield(delta: float) -> void:
+	if orbital_shield_timer <= 0.0:
+		if orbital_shield_visual:
+			orbital_shield_visual.visible = false
+		return
+	orbital_shield_timer = max(0.0, orbital_shield_timer - delta)
+	if manager:
+		manager.perform_orbital_shield(global_position, orbital_shield_radius)
+	if orbital_shield_visual and orbital_shield_material:
+		var progress: float = 1.0 - orbital_shield_timer / max(0.001, orbital_shield_duration)
+		var pulse: float = 1.0 + sin(progress * TAU * 3.0) * 0.06
+		var alpha: float = lerp(0.26, 0.08, progress)
+		orbital_shield_visual.visible = true
+		orbital_shield_visual.scale = Vector3.ONE * orbital_shield_radius * pulse
+		var color := Color(0.35, 0.95, 1.0, alpha)
+		orbital_shield_material.albedo_color = color
+		orbital_shield_material.emission = color
+	if orbital_shield_timer <= 0.0 and orbital_shield_visual:
+		orbital_shield_visual.visible = false
 
 
 func _update_camera_feedback(delta: float) -> void:
@@ -496,6 +598,8 @@ func _current_intended_boost_direction() -> Vector3:
 func _update_gravity(delta: float) -> void:
 	var target_down: Vector3 = _target_gravity_down()
 	var lerp_speed: float = gravity_lerp_speed
+	if orbital_shield_timer > 0.0:
+		lerp_speed = max(lerp_speed, orbital_shield_gravity_lerp_speed)
 	var radial: Vector3 = global_position - sphere_center
 	if radial.length_squared() > 0.001 and radial.normalized().dot(gravity_down) < center_flip_dot_threshold:
 		lerp_speed = center_flip_lerp_speed

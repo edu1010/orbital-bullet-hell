@@ -11,8 +11,6 @@ var direction: Vector3 = Vector3.FORWARD
 var speed := 50.0
 var age := 0.0
 var visual: MeshInstance3D
-var reflect_cooldown := 0.0
-var ignored_reflector: HealReflector
 
 
 func _ready() -> void:
@@ -26,8 +24,6 @@ func activate(_manager: GameManager, origin: Vector3, _direction: Vector3, _spee
 	direction = _direction.normalized()
 	speed = _speed
 	age = 0.0
-	reflect_cooldown = 0.0
-	ignored_reflector = null
 	active = true
 	visible = true
 	set_physics_process(true)
@@ -46,21 +42,14 @@ func _physics_process(delta: float) -> void:
 	if manager and not manager.is_playing():
 		return
 	age += delta
-	reflect_cooldown = max(0.0, reflect_cooldown - delta)
-	if reflect_cooldown <= 0.0:
-		ignored_reflector = null
 	global_position += direction * speed * delta
 	if age >= lifetime:
 		deactivate()
 		return
 	var reflector: HealReflector = manager.find_reflector_hit(global_position, hit_radius)
-	if reflector and reflector != ignored_reflector:
+	if reflector:
 		reflector.on_primary_hit(direction)
-		direction = -direction
-		reflect_cooldown = 0.16
-		ignored_reflector = reflector
-		global_position += direction * (hit_radius + reflector.body_radius + 0.15)
-		look_at(global_position + direction, Vector3.UP)
+		deactivate()
 		return
 	var enemy: EnemyBase = manager.find_enemy_hit(global_position, hit_radius, true)
 	if enemy:

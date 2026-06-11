@@ -9,6 +9,8 @@ var high_score_label: Label
 var hp_label: Label
 var charge_label: Label
 var charge_bar: ProgressBar
+var shield_label: Label
+var shield_bar: ProgressBar
 var boost_label: Label
 var boost_bar: ProgressBar
 var combo_label: Label
@@ -61,6 +63,15 @@ func update_hud(data: Dictionary) -> void:
 	charge_bar.max_value = charge_max
 	charge_bar.value = charge
 	charge_label.text = "Extra: %03d%%" % int(round(charge / charge_max * 100.0))
+	var shield: float = float(data.get("shield", 0.0))
+	var shield_max: float = float(data.get("shield_max", 100.0))
+	shield_bar.max_value = shield_max
+	shield_bar.value = shield
+	shield_label.text = "Shield: %03d%%" % int(round(shield / shield_max * 100.0))
+	if data.get("shield_active", false):
+		shield_label.modulate = Color(0.35, 0.95, 1.0)
+	else:
+		shield_label.modulate = Color(1.0, 1.0, 1.0)
 	var boost: float = float(data.get("boost", 0.0))
 	var boost_max: float = float(data.get("boost_max", 100.0))
 	boost_bar.max_value = boost_max
@@ -120,6 +131,20 @@ func boost_ready_feedback() -> void:
 	_play_tone(660.0, 0.1)
 
 
+func orbital_shield_ready_feedback() -> void:
+	ready_timer = 1.1
+	ready_label.modulate.a = 1.0
+	ready_label.text = "SHIELD READY"
+	_play_tone(1040.0, 0.12)
+
+
+func orbital_shield_feedback() -> void:
+	ready_timer = 0.5
+	ready_label.modulate.a = 1.0
+	ready_label.text = "SHIELD"
+	_play_tone(440.0, 0.08)
+
+
 func boost_feedback() -> void:
 	ready_timer = 0.35
 	ready_label.modulate.a = 1.0
@@ -145,6 +170,7 @@ func _build_ui() -> void:
 	high_score_label = _make_label(16)
 	hp_label = _make_label()
 	charge_label = _make_label()
+	shield_label = _make_label()
 	boost_label = _make_label()
 	combo_label = _make_label()
 	time_label = _make_label()
@@ -160,6 +186,14 @@ func _build_ui() -> void:
 	charge_bar.max_value = 100.0
 	_style_charge_bar()
 	hud.add_child(charge_bar)
+	hud.add_child(shield_label)
+	shield_bar = ProgressBar.new()
+	shield_bar.custom_minimum_size = Vector2(260.0, 14.0)
+	shield_bar.show_percentage = false
+	shield_bar.min_value = 0.0
+	shield_bar.max_value = 100.0
+	_style_shield_bar()
+	hud.add_child(shield_bar)
 	hud.add_child(boost_label)
 	boost_bar = ProgressBar.new()
 	boost_bar.custom_minimum_size = Vector2(260.0, 14.0)
@@ -235,6 +269,17 @@ func _style_boost_bar() -> void:
 	fill.bg_color = Color(0.45, 1.0, 0.25, 0.94)
 	boost_bar.add_theme_stylebox_override("background", background)
 	boost_bar.add_theme_stylebox_override("fill", fill)
+
+
+func _style_shield_bar() -> void:
+	var background := StyleBoxFlat.new()
+	background.bg_color = Color(0.03, 0.055, 0.075, 0.88)
+	background.border_color = Color(0.32, 0.8, 0.95)
+	background.set_border_width_all(1)
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = Color(0.38, 0.94, 1.0, 0.95)
+	shield_bar.add_theme_stylebox_override("background", background)
+	shield_bar.add_theme_stylebox_override("fill", fill)
 
 
 func _format_time(seconds: float) -> String:

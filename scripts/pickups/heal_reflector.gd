@@ -4,10 +4,9 @@ extends Node3D
 @export var body_radius := 2.35
 @export var collect_radius := 3.05
 @export var touch_heal := 0.75
-@export var extra_shot_heal := 0.35
-@export var attract_speed := 18.0
-@export var attract_acceleration := 7.0
-@export var wake_duration := 5.2
+@export var attract_speed := 32.0
+@export var attract_acceleration := 14.0
+@export var wake_duration := 9.0
 @export var idle_drift_speed := 1.4
 
 var manager: GameManager
@@ -49,13 +48,13 @@ func deactivate() -> void:
 func on_primary_hit(hit_direction: Vector3) -> void:
 	if not active:
 		return
-	wake_timer = wake_duration
+	wake_timer = max(wake_timer, wake_duration)
 	if player:
 		var to_player: Vector3 = player.global_position - global_position
 		if to_player.length_squared() > 0.01:
-			velocity += to_player.normalized() * 4.5
+			velocity = to_player.normalized() * attract_speed
 	if hit_direction.length_squared() > 0.01:
-		velocity += hit_direction.normalized() * 1.5
+		velocity += hit_direction.normalized() * 2.0
 	if manager:
 		manager.spawn_burst(global_position, Color(1.0, 0.58, 0.12), body_radius * 1.05, 0.18)
 
@@ -63,11 +62,13 @@ func on_primary_hit(hit_direction: Vector3) -> void:
 func on_extra_hit() -> void:
 	if not active:
 		return
+	wake_timer = max(wake_timer, wake_duration)
 	if player:
-		player.heal(extra_shot_heal)
+		var to_player: Vector3 = player.global_position - global_position
+		if to_player.length_squared() > 0.01:
+			velocity = to_player.normalized() * attract_speed * 1.25
 	if manager:
 		manager.spawn_burst(global_position, Color(1.0, 0.42, 0.08), body_radius * 2.4, 0.36)
-	deactivate()
 
 
 func _physics_process(delta: float) -> void:
@@ -95,10 +96,18 @@ func _physics_process(delta: float) -> void:
 		velocity = velocity.move_toward(idle_target_velocity, idle_drift_speed * delta)
 	global_position += velocity * delta
 	if player and global_position.distance_squared_to(player.global_position) <= collect_radius * collect_radius:
-		player.heal(touch_heal)
+		_heal_player_and_emit_waves(touch_heal)
 		if manager:
 			manager.spawn_burst(global_position, Color(0.45, 1.0, 0.35), body_radius * 1.8, 0.32)
 		deactivate()
+
+
+func _heal_player_and_emit_waves(amount: float) -> void:
+	if not player:
+		return
+	player.heal(amount)
+	if manager:
+		manager.spawn_heal_cross_waves(player.global_position)
 
 
 func _create_visual() -> void:

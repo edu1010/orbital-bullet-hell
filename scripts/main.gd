@@ -6,6 +6,8 @@ extends Node3D
 @export var grid_latitude_lines := 15
 @export var grid_longitude_lines := 32
 @export var grid_line_segments := 96
+@export var grid_surface_offset := 0.18
+@export_range(0.0, 0.35, 0.01) var grid_pole_gap_radians := 0.08
 
 @onready var arena: Node3D = $Arena
 @onready var game_manager: GameManager = $GameManager
@@ -85,7 +87,8 @@ func _build_sphere_grid() -> void:
 	var grid := MeshInstance3D.new()
 	var immediate := ImmediateMesh.new()
 	immediate.surface_begin(Mesh.PRIMITIVE_LINES)
-	var grid_radius: float = arena_radius - 0.12
+	var grid_radius: float = arena_radius - grid_surface_offset
+	var pole_limit: float = PI * 0.5 - grid_pole_gap_radians
 	for lat_index in range(1, grid_latitude_lines):
 		var latitude: float = lerp(-PI * 0.5, PI * 0.5, float(lat_index) / float(grid_latitude_lines))
 		for segment in range(grid_line_segments):
@@ -96,8 +99,8 @@ func _build_sphere_grid() -> void:
 	for lon_index in range(grid_longitude_lines):
 		var longitude: float = TAU * float(lon_index) / float(grid_longitude_lines)
 		for segment in range(grid_line_segments):
-			var t0: float = lerp(-PI * 0.5, PI * 0.5, float(segment) / float(grid_line_segments))
-			var t1: float = lerp(-PI * 0.5, PI * 0.5, float(segment + 1) / float(grid_line_segments))
+			var t0: float = lerp(-pole_limit, pole_limit, float(segment) / float(grid_line_segments))
+			var t1: float = lerp(-pole_limit, pole_limit, float(segment + 1) / float(grid_line_segments))
 			immediate.surface_add_vertex(_sphere_point(grid_radius, t0, longitude))
 			immediate.surface_add_vertex(_sphere_point(grid_radius, t1, longitude))
 	immediate.surface_end()

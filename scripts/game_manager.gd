@@ -17,11 +17,13 @@ enum RunState { MENU, PLAYING, PAUSED, GAME_OVER }
 @export var laser_beam_pool_initial := 8
 @export var laser_ring_pool_initial := 56
 @export var heal_reflector_pool_initial := 18
+@export var score_magnet_pool_initial := 6
 @export var swarmer_pool_initial := 460
 @export var charger_pool_initial := 150
 @export var avoider_pool_initial := 150
 @export var bomb_pool_initial := 24
 @export var max_active_reflectors := 18
+@export var max_active_score_magnets := 6
 
 @export_group("Scoring")
 @export var shard_base_value := 5
@@ -30,6 +32,14 @@ enum RunState { MENU, PLAYING, PAUSED, GAME_OVER }
 @export var combo_decay_delay := 2.2
 @export var combo_decay_rate := 0.9
 @export var combo_max := 12.0
+@export var score_magnet_drop_chance := 0.035
+
+@export_group("Heal Waves")
+@export var heal_wave_duration := 2.4
+@export var heal_wave_start_radius := 2.2
+@export var heal_wave_thickness := 2.6
+@export var heal_wave_visual_width := 0.75
+@export var heal_wave_visual_width_scale := 0.028
 
 const PROJECTILE_SCENE := preload("res://scenes/projectiles/Projectile.tscn")
 const SHARD_SCENE := preload("res://scenes/shards/Shard.tscn")
@@ -37,6 +47,7 @@ const BURST_SCENE := preload("res://scenes/effects/BurstEffect.tscn")
 const LASER_BEAM_SCENE := preload("res://scenes/effects/LaserBeamEffect.tscn")
 const LASER_RING_SCENE := preload("res://scenes/effects/LaserRingEffect.tscn")
 const HEAL_REFLECTOR_SCENE := preload("res://scenes/pickups/HealReflector.tscn")
+const SCORE_MAGNET_SCENE := preload("res://scenes/pickups/ScoreMagnet.tscn")
 const ENEMY_SCENES := {
 	"swarmer": preload("res://scenes/enemies/Swarmer.tscn"),
 	"charger": preload("res://scenes/enemies/Charger.tscn"),
@@ -67,10 +78,13 @@ var effect_pool: Array[BurstEffect] = []
 var laser_beam_pool: Array[LaserBeamEffect] = []
 var laser_ring_pool: Array[LaserRingEffect] = []
 var heal_reflector_pool: Array[HealReflector] = []
+var score_magnet_pool: Array[ScoreMagnet] = []
 var active_enemies: Array[EnemyBase] = []
 var active_projectiles: Array[PlayerProjectile] = []
 var active_shards: Array[ScoreShard] = []
 var active_reflectors: Array[HealReflector] = []
+var active_score_magnets: Array[ScoreMagnet] = []
+var active_heal_waves: Array[Dictionary] = []
 var kills_this_run := 0
 var kills_in_sample := 0
 var kill_rate_sample_timer := 0.0
@@ -181,6 +195,7 @@ func _process(delta: float) -> void:
 	else:
 		combo = max(1.0, combo - combo_decay_rate * delta)
 	_update_kill_rate(delta)
+	_update_heal_waves(delta)
 	_handle_player_enemy_contacts()
 	_update_ui()
 
@@ -200,6 +215,7 @@ func _setup_pools() -> void:
 	_prewarm_pool(laser_beam_pool, LASER_BEAM_SCENE, effects_container, laser_beam_pool_initial)
 	_prewarm_pool(laser_ring_pool, LASER_RING_SCENE, effects_container, laser_ring_pool_initial)
 	_prewarm_pool(heal_reflector_pool, HEAL_REFLECTOR_SCENE, reflectors_container, heal_reflector_pool_initial)
+	_prewarm_pool(score_magnet_pool, SCORE_MAGNET_SCENE, reflectors_container, score_magnet_pool_initial)
 
 
 func _prewarm_enemy_pool(enemy_type: String, count: int) -> void:
@@ -253,10 +269,14 @@ func _deactivate_all() -> void:
 		ring.deactivate()
 	for reflector in heal_reflector_pool:
 		reflector.deactivate()
+	for magnet in score_magnet_pool:
+		magnet.deactivate()
 	active_enemies.clear()
 	active_projectiles.clear()
 	active_shards.clear()
 	active_reflectors.clear()
+	active_score_magnets.clear()
+	active_heal_waves.clear()
 
 
 func spawn_enemy(enemy_type: String, spawn_position: Vector3) -> EnemyBase:
@@ -319,11 +339,72 @@ func spawn_laser_beam(origin: Vector3, direction: Vector3, length: float, radius
 	beam.activate(origin, direction, length, radius, color, lifetime)
 
 
-func spawn_laser_ring(origin: Vector3, direction: Vector3, start_radius: float, end_radius: float, color: Color, lifetime: float) -> void:
+func spawn_laser_ring(
+	origin: Vector3,
+	direction: Vector3,
+	start_radius: float,
+	end_radius: float,
+	color: Color,
+	lifetime: float,
+	width_hint: float = -1.0,
+	width_scale: float = -1.0
+) -> void:
 	var ring: LaserRingEffect = _get_from_pool(laser_ring_pool, LASER_RING_SCENE, effects_container) as LaserRingEffect
 	if not ring:
 		return
-	ring.activate(origin, direction, start_radius, end_radius, color, lifetime)
+	ring.activate(origin, direction, start_radius, end_radius, color, lifetime, width_hint, width_scale)
+
+
+func spawn_orbital_shield_visual(origin: Vector3, axis: Vector3, radius: float) -> void:
+	var shield_color := Color(0.38, 0.94, 1.0, 0.92)
+	var normalized_axis: Vector3 = axis.normalized()
+	if normalized_axis.length_squared() <= 0.001:
+		normalized_axis = Vector3.UP
+	var tangent: Vector3 = normalized_axis.cross(Vector3.UP)
+	if tangent.length_squared() <= 0.001:
+		tangent = normalized_axis.cross(Vector3.RIGHT)
+	tangent = tangent.normalized()
+	var bitangent: Vector3 = normalized_axis.cross(tangent).normalized()
+	spawn_burst(origin, shield_color, radius * 1.15, 0.5)
+	for ring_direction in [normalized_axis, tangent, bitangent]:
+		spawn_laser_ring(origin, ring_direction, radius * 0.25, radius * 1.08, shield_color, 0.42)
+
+
+func spawn_heal_cross_waves(origin: Vector3) -> void:
+	if not player:
+		return
+	var view_basis: Basis = player.get_view_basis()
+	var forward: Vector3 = -view_basis.z
+	if forward.length_squared() <= 0.001:
+		forward = player.get_tangent_forward()
+	forward = forward.normalized()
+	var right: Vector3 = view_basis.x
+	if right.length_squared() <= 0.001:
+		right = player.get_tangent_right()
+	right = right.normalized()
+	var max_radius: float = player.sphere_radius * 2.0
+	var wave_normals := [(forward + right * 0.35).normalized(), (forward - right * 0.35).normalized()]
+	var wave_color := Color(0.55, 0.98, 1.0, 0.98)
+	for i in range(wave_normals.size()):
+		var normal: Vector3 = wave_normals[i]
+		active_heal_waves.append({
+			"origin": origin,
+			"normal": normal,
+			"age": 0.0,
+			"prev_radius": heal_wave_start_radius,
+			"max_radius": max_radius,
+		})
+		spawn_laser_ring(
+			origin,
+			normal,
+			heal_wave_start_radius,
+			max_radius,
+			wave_color,
+			heal_wave_duration,
+			heal_wave_visual_width,
+			heal_wave_visual_width_scale
+		)
+	spawn_burst(origin, wave_color, heal_wave_start_radius * 1.7, 0.28)
 
 
 func spawn_heal_reflector(spawn_position: Vector3) -> HealReflector:
@@ -338,6 +419,18 @@ func spawn_heal_reflector(spawn_position: Vector3) -> HealReflector:
 	return reflector
 
 
+func spawn_score_magnet(spawn_position: Vector3) -> ScoreMagnet:
+	if active_score_magnet_count() >= max_active_score_magnets:
+		return null
+	var magnet: ScoreMagnet = _get_from_pool(score_magnet_pool, SCORE_MAGNET_SCENE, reflectors_container, max_active_score_magnets) as ScoreMagnet
+	if not magnet:
+		return null
+	magnet.activate(self, player, spawn_position)
+	if not active_score_magnets.has(magnet):
+		active_score_magnets.append(magnet)
+	return magnet
+
+
 func on_enemy_killed(enemy: EnemyBase, source: String, spawn_pickups: bool = true) -> void:
 	# Kills feed score, combo, shards, and extra-shot charge from one place.
 	kills_this_run += 1
@@ -349,15 +442,35 @@ func on_enemy_killed(enemy: EnemyBase, source: String, spawn_pickups: bool = tru
 	if spawn_pickups:
 		var shard_count: int = randi_range(enemy.shard_drop_min, enemy.shard_drop_max)
 		spawn_shards(enemy.global_position, shard_count, shard_base_value, 3.1)
+		_try_spawn_score_magnet(enemy.global_position)
 	if player:
 		player.add_kill_charge(source, combo)
 	spawn_burst(enemy.global_position, enemy.visual_color, enemy.body_radius * 1.6, 0.24)
+
+
+func _try_spawn_score_magnet(origin: Vector3) -> void:
+	if randf() > score_magnet_drop_chance:
+		return
+	var magnet_position := origin
+	if player:
+		magnet_position = player.project_inside_sphere(origin, 4.0)
+	var magnet: ScoreMagnet = spawn_score_magnet(magnet_position)
+	if magnet:
+		spawn_burst(magnet_position, Color(0.85, 0.35, 1.0), 2.6, 0.26)
 
 
 func collect_shard(value: int) -> void:
 	score += int(round(float(value) * combo))
 	combo = min(combo_max, combo + combo_shard_gain)
 	combo_decay_timer = combo_decay_delay
+	if player:
+		player.add_orbital_shield_charge(float(value) * player.orbital_shield_shard_charge_per_point)
+
+
+func attract_all_shards() -> void:
+	for shard in active_shards:
+		if shard.active:
+			shard.magnetize()
 
 
 func find_enemy_hit(position: Vector3, radius: float, include_bombs := true) -> EnemyBase:
@@ -454,6 +567,69 @@ func perform_extra_shot(origin: Vector3, direction: Vector3, beam_radius: float,
 	return killed
 
 
+func perform_orbital_shield(origin: Vector3, radius: float) -> int:
+	var killed := 0
+	var snapshot: Array = active_enemies.duplicate()
+	for raw_enemy in snapshot:
+		var enemy: EnemyBase = raw_enemy as EnemyBase
+		if not enemy or not enemy.active:
+			continue
+		if enemy.global_position.distance_to(origin) > radius + enemy.body_radius:
+			continue
+		if enemy is BombEnemy:
+			killed += detonate_bomb(enemy as BombEnemy, "shield")
+		else:
+			enemy.kill("shield", true)
+			killed += 1
+	return killed
+
+
+func _update_heal_waves(delta: float) -> void:
+	for i in range(active_heal_waves.size() - 1, -1, -1):
+		var wave: Dictionary = active_heal_waves[i]
+		var age: float = float(wave.get("age", 0.0)) + delta
+		var max_radius: float = float(wave.get("max_radius", heal_wave_start_radius))
+		var prev_radius: float = float(wave.get("prev_radius", heal_wave_start_radius))
+		var origin: Vector3 = wave.get("origin", Vector3.ZERO)
+		var normal: Vector3 = wave.get("normal", Vector3.UP)
+		var progress: float = clamp(age / max(0.001, heal_wave_duration), 0.0, 1.0)
+		var eased: float = 1.0 - pow(1.0 - progress, 2.0)
+		var radius: float = lerp(heal_wave_start_radius, max_radius, eased)
+		_kill_enemies_touched_by_heal_wave(origin, normal, prev_radius, radius)
+		if progress >= 1.0:
+			active_heal_waves.remove_at(i)
+		else:
+			wave["age"] = age
+			wave["prev_radius"] = radius
+			active_heal_waves[i] = wave
+
+
+func _kill_enemies_touched_by_heal_wave(origin: Vector3, normal: Vector3, previous_radius: float, current_radius: float) -> void:
+	if normal.length_squared() <= 0.001:
+		return
+	normal = normal.normalized()
+	var min_radius: float = min(previous_radius, current_radius)
+	var max_radius: float = max(previous_radius, current_radius)
+	var snapshot: Array = active_enemies.duplicate()
+	for raw_enemy in snapshot:
+		var enemy: EnemyBase = raw_enemy as EnemyBase
+		if not enemy or not enemy.active:
+			continue
+		var offset: Vector3 = enemy.global_position - origin
+		var contact_radius: float = heal_wave_thickness + enemy.body_radius
+		if abs(offset.dot(normal)) > contact_radius:
+			continue
+		var radial_distance: float = offset.slide(normal).length()
+		if radial_distance + contact_radius < min_radius:
+			continue
+		if radial_distance - contact_radius > max_radius:
+			continue
+		if enemy is BombEnemy:
+			detonate_bomb(enemy as BombEnemy, "heal_wave")
+		else:
+			enemy.kill("heal_wave", true)
+
+
 func _spawn_extra_laser_visual(origin: Vector3, direction: Vector3, beam_radius: float, beam_range: float) -> void:
 	var laser_color: Color = Color(0.42, 0.93, 1.0, 0.88)
 	spawn_laser_beam(origin + direction * 1.5, direction, beam_range, 0.16, laser_color, 0.2)
@@ -522,6 +698,14 @@ func active_reflector_count() -> int:
 	return count
 
 
+func active_score_magnet_count() -> int:
+	var count := 0
+	for magnet in active_score_magnets:
+		if magnet.active:
+			count += 1
+	return count
+
+
 func get_recent_kill_rate() -> float:
 	return recent_kill_rate
 
@@ -565,6 +749,9 @@ func _update_ui() -> void:
 		"max_hp": player.max_hp,
 		"charge": player.extra_charge,
 		"charge_max": player.extra_shot_charge_max,
+		"shield": player.orbital_shield_charge,
+		"shield_max": player.orbital_shield_charge_max,
+		"shield_active": player.orbital_shield_timer > 0.0,
 		"boost": player.boost_charge,
 		"boost_max": player.boost_charge_max,
 		"boost_active": player.boost_timer > 0.0,
