@@ -165,9 +165,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		pitch = clamp(pitch - event.relative.y * mouse_sensitivity, -deg_to_rad(max_pitch_degrees), deg_to_rad(max_pitch_degrees))
 		head.rotation.x = pitch
 	elif event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_SPACE:
+		if event.keycode == manager.get_bound_key("jump", KEY_SPACE):
+			manager.dismiss_start_controls_hint()
 			jump_buffer_timer = jump_buffer_time
-		elif event.keycode == KEY_SHIFT:
+		elif event.keycode == manager.get_bound_key("boost", KEY_SHIFT):
 			try_boost()
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
 		try_fire_orbital_shield()
@@ -205,6 +206,8 @@ func _update_timers(delta: float) -> void:
 
 func _apply_arcade_movement(delta: float) -> void:
 	var input: Vector2 = _read_move_input()
+	if input.length_squared() > 0.0:
+		manager.dismiss_start_controls_hint()
 	var forward: Vector3 = get_tangent_forward()
 	var right: Vector3 = get_tangent_right()
 	var move_direction: Vector3 = right * input.x + forward * -input.y
@@ -228,13 +231,13 @@ func _apply_arcade_movement(delta: float) -> void:
 
 func _read_move_input() -> Vector2:
 	var input := Vector2.ZERO
-	if Input.is_key_pressed(KEY_A):
+	if Input.is_key_pressed(manager.get_bound_key("left", KEY_A)):
 		input.x -= 1.0
-	if Input.is_key_pressed(KEY_D):
+	if Input.is_key_pressed(manager.get_bound_key("right", KEY_D)):
 		input.x += 1.0
-	if Input.is_key_pressed(KEY_W):
+	if Input.is_key_pressed(manager.get_bound_key("forward", KEY_W)):
 		input.y -= 1.0
-	if Input.is_key_pressed(KEY_S):
+	if Input.is_key_pressed(manager.get_bound_key("backward", KEY_S)):
 		input.y += 1.0
 	return input.normalized()
 
@@ -367,6 +370,7 @@ func _apply_downward_fire_lift(direction: Vector3, impulse: float) -> void:
 func try_boost() -> void:
 	if boost_charge < boost_charge_max:
 		return
+	manager.dismiss_start_controls_hint()
 	boost_charge = 0.0
 	boost_ready_cue_played = false
 	boost_timer = boost_duration

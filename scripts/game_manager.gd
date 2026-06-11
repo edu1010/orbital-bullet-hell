@@ -96,6 +96,7 @@ var kill_rate_sample_timer := 0.0
 var recent_kill_rate := 0.0
 var next_power_surge_score := 10000
 var power_surge_end_msec := 0
+var start_controls_hint_visible := false
 
 
 func configure(
@@ -124,9 +125,11 @@ func configure(
 func show_main_menu() -> void:
 	Engine.time_scale = 1.0
 	power_surge_end_msec = 0
+	start_controls_hint_visible = false
 	state = RunState.MENU
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	if ui:
+		ui.show_start_controls_hint(false)
 		ui.show_state(state)
 	run_state_changed.emit(state)
 
@@ -140,6 +143,7 @@ func start_run() -> void:
 	score = 0
 	next_power_surge_score = maxi(1, score_milestone_step)
 	power_surge_end_msec = 0
+	start_controls_hint_visible = true
 	combo = 1.0
 	combo_decay_timer = 0.0
 	survival_time = 0.0
@@ -152,6 +156,7 @@ func start_run() -> void:
 	spawn_manager.reset_for_run()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	ui.show_state(state)
+	ui.show_start_controls_hint(true)
 	run_state_changed.emit(state)
 	_update_ui()
 
@@ -169,15 +174,35 @@ func toggle_pause() -> void:
 	run_state_changed.emit(state)
 
 
+func resume_from_pause() -> void:
+	if state != RunState.PAUSED:
+		return
+	state = RunState.PLAYING
+	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	ui.show_state(state)
+	run_state_changed.emit(state)
+
+
+func return_to_main_menu() -> void:
+	if state != RunState.MENU:
+		high_score = max(high_score, score)
+		_save_high_score()
+		_deactivate_all()
+	show_main_menu()
+	_update_ui()
+
+
 func end_run() -> void:
 	if state == RunState.GAME_OVER:
 		return
 	Engine.time_scale = 1.0
 	power_surge_end_msec = 0
+	start_controls_hint_visible = false
 	state = RunState.GAME_OVER
 	high_score = max(high_score, score)
 	_save_high_score()
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	ui.show_start_controls_hint(false)
 	ui.show_state(state)
 	run_state_changed.emit(state)
 	_update_ui()
@@ -187,17 +212,33 @@ func is_playing() -> bool:
 	return state == RunState.PLAYING
 
 
+func dismiss_start_controls_hint() -> void:
+	if not start_controls_hint_visible:
+		return
+	start_controls_hint_visible = false
+	if ui:
+		ui.show_start_controls_hint(false)
+
+
+func get_bound_key(action_name: String, fallback: int) -> int:
+	if ui:
+		return ui.get_bound_key(action_name, fallback)
+	return fallback
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_ESCAPE:
-			toggle_pause()
+		var menu_key: int = get_bound_key("menu", KEY_ESCAPE)
+		if event.keycode == menu_key:
+			if (state == RunState.MENU or state == RunState.PAUSED) and ui and not ui.is_base_menu_screen():
+				ui.return_to_main_menu_screen()
+			else:
+				toggle_pause()
 		elif state == RunState.GAME_OVER and event.keycode == KEY_R:
 			start_run()
 		elif state == RunState.MENU and (event.keycode == KEY_SPACE or event.keycode == KEY_ENTER):
-			start_run()
-	elif event is InputEventMouseButton and event.pressed:
-		if state == RunState.MENU and event.button_index == MOUSE_BUTTON_LEFT:
-			start_run()
+			if not ui or ui.is_main_menu_screen():
+				start_run()
 
 
 func _process(delta: float) -> void:
