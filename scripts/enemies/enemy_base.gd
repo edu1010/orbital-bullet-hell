@@ -9,7 +9,7 @@ extends Node3D
 @export var shard_drop_min := 1
 @export var shard_drop_max := 3
 @export var max_lifetime := 40.0
-@export var max_distance_from_player := 135.0
+@export var max_distance_from_player := 215.0
 @export var can_be_platform := true
 @export var mesh_shape := "sphere"
 @export var visual_style := "swarm_mask"

@@ -1,6 +1,6 @@
 extends Node3D
 
-@export var arena_radius := 120.0
+@export var arena_radius := 52.0
 @export var sphere_segments := 96
 @export var sphere_rings := 48
 @export var grid_latitude_lines := 15

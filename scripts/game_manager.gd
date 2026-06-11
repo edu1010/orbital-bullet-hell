@@ -8,7 +8,7 @@ enum RunState { MENU, PLAYING, PAUSED, GAME_OVER }
 # Central run coordinator: owns state, score, combo, high score, pooled objects,
 # and cross-system collision rules that are cheaper as distance checks.
 @export_group("Pools")
-@export var max_active_enemies := 1600
+@export var max_active_enemies := 2400
 @export var max_active_projectiles := 180
 @export var max_active_shards := 700
 @export var projectile_pool_initial := 90
@@ -17,10 +17,10 @@ enum RunState { MENU, PLAYING, PAUSED, GAME_OVER }
 @export var laser_beam_pool_initial := 8
 @export var laser_ring_pool_initial := 56
 @export var heal_reflector_pool_initial := 18
-@export var swarmer_pool_initial := 260
-@export var charger_pool_initial := 80
-@export var avoider_pool_initial := 80
-@export var bomb_pool_initial := 16
+@export var swarmer_pool_initial := 460
+@export var charger_pool_initial := 150
+@export var avoider_pool_initial := 150
+@export var bomb_pool_initial := 24
 @export var max_active_reflectors := 18
 
 @export_group("Scoring")
@@ -391,16 +391,16 @@ func find_reflector_hit(position: Vector3, radius: float) -> HealReflector:
 	return null
 
 
-func find_enemy_platform(feet_position: Vector3, gravity_down: Vector3, platform_radius: float) -> EnemyBase:
+func find_enemy_platform(feet_position: Vector3, gravity_down: Vector3, platform_radius: float, probe_distance: float = 0.85) -> EnemyBase:
 	var best_enemy: EnemyBase = null
-	var best_delta := 999.0
+	var best_delta: float = 999.0
 	for enemy in active_enemies:
 		if not enemy.active or not enemy.can_be_platform:
 			continue
 		var top_point: Vector3 = enemy.global_position - gravity_down * enemy.platform_height
 		var delta_to_top: Vector3 = feet_position - top_point
 		var vertical_delta: float = delta_to_top.dot(gravity_down)
-		if vertical_delta > 0.45 or vertical_delta < -0.8:
+		if vertical_delta > 0.45 or vertical_delta < -probe_distance:
 			continue
 		var horizontal: Vector3 = delta_to_top.slide(gravity_down)
 		var allowed: float = platform_radius + enemy.body_radius

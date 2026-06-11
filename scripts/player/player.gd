@@ -15,12 +15,16 @@ extends CharacterBody3D
 @export var coyote_time := 0.14
 @export var jump_buffer_time := 0.16
 @export var enemy_platform_radius := 0.55
+@export var enemy_jump_probe_distance := 2.25
+@export var enemy_platform_snap_distance := 0.85
 @export var body_half_height := 0.9
 
 @export_group("Spherical Gravity")
 @export var sphere_center := Vector3.ZERO
-@export var sphere_radius := 120.0
-@export var gravity_lerp_speed := 7.0
+@export var sphere_radius := 52.0
+@export var gravity_lerp_speed := 8.5
+@export var center_flip_lerp_speed := 16.0
+@export var center_flip_dot_threshold := -0.2
 @export var surface_snap_margin := 0.75
 
 @export_group("Look")
@@ -175,7 +179,7 @@ func _update_timers(delta: float) -> void:
 
 
 func _apply_arcade_movement(delta: float) -> void:
-	var input := _read_move_input()
+	var input: Vector2 = _read_move_input()
 	var forward: Vector3 = get_tangent_forward()
 	var right: Vector3 = get_tangent_right()
 	var move_direction: Vector3 = right * input.x + forward * -input.y
@@ -237,15 +241,18 @@ func _update_enemy_platform() -> void:
 	if not enemy_jump_resets or velocity.dot(gravity_down) < -1.5:
 		return
 	var feet_position: Vector3 = global_position + gravity_down * body_half_height
-	var enemy: EnemyBase = manager.find_enemy_platform(feet_position, gravity_down, enemy_platform_radius)
+	var enemy: EnemyBase = manager.find_enemy_platform(feet_position, gravity_down, enemy_platform_radius, enemy_jump_probe_distance)
 	if not enemy:
 		return
 	var top_point: Vector3 = enemy.global_position - gravity_down * enemy.platform_height
-	global_position = top_point - gravity_down * body_half_height
-	var down_speed: float = velocity.dot(gravity_down)
-	if down_speed > 0.0:
-		velocity -= gravity_down * down_speed
-	current_platform_enemy = enemy
+	var delta_to_top: Vector3 = feet_position - top_point
+	var vertical_delta: float = delta_to_top.dot(gravity_down)
+	if vertical_delta >= -enemy_platform_snap_distance and vertical_delta <= 0.45:
+		global_position = top_point - gravity_down * body_half_height
+		var down_speed: float = velocity.dot(gravity_down)
+		if down_speed > 0.0:
+			velocity -= gravity_down * down_speed
+		current_platform_enemy = enemy
 	coyote_timer = coyote_time
 	jumps_remaining = double_jump_count
 
@@ -455,8 +462,15 @@ func _current_intended_boost_direction() -> Vector3:
 
 func _update_gravity(delta: float) -> void:
 	var target_down: Vector3 = _target_gravity_down()
-	var blend: float = clamp(gravity_lerp_speed * delta, 0.0, 1.0)
-	gravity_down = gravity_down.slerp(target_down, blend).normalized()
+	var lerp_speed: float = gravity_lerp_speed
+	var radial: Vector3 = global_position - sphere_center
+	if radial.length_squared() > 0.001 and radial.normalized().dot(gravity_down) < center_flip_dot_threshold:
+		lerp_speed = center_flip_lerp_speed
+	var blend: float = clamp(lerp_speed * delta, 0.0, 1.0)
+	if gravity_down.dot(target_down) < -0.98:
+		gravity_down = gravity_down.lerp(target_down, blend).normalized()
+	else:
+		gravity_down = gravity_down.slerp(target_down, blend).normalized()
 	up_direction = -gravity_down
 	_align_body_to_gravity(blend)
 

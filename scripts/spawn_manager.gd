@@ -4,16 +4,16 @@ extends Node
 # Spawns are distributed across the whole sphere. Enemy pressure ramps
 # exponentially, then settles toward the player's recent kill rate.
 @export_group("Spawn Rate")
-@export var base_spawn_rate_per_second := 7.0
-@export var exponential_growth_base := 1.24
-@export var exponential_growth_period := 9.0
+@export var base_spawn_rate_per_second := 12.0
+@export var exponential_growth_base := 1.28
+@export var exponential_growth_period := 8.0
 @export var score_spawn_scale := 0.000012
-@export var max_exponential_spawn_rate := 95.0
+@export var max_exponential_spawn_rate := 165.0
 @export var equilibrium_start_time := 85.0
 @export var equilibrium_spawn_to_kill_ratio := 1.05
-@export var equilibrium_min_spawn_rate := 8.0
-@export var max_spawn_per_frame := 45
-@export var active_count_soft_cap := 1450
+@export var equilibrium_min_spawn_rate := 18.0
+@export var max_spawn_per_frame := 80
+@export var active_count_soft_cap := 2150
 @export var soft_cap_throttle_start := 0.78
 
 @export_group("Spawn Placement")
