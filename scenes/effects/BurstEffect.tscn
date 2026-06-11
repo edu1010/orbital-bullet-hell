@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://bnm4gftm83knp"]
+
+[ext_resource type="Script" path="res://scripts/effects/burst_effect.gd" id="1_burst"]
+
+[node name="BurstEffect" type="Node3D"]
+script = ExtResource("1_burst")

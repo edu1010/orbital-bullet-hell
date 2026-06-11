@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://dq32svm51rtvj"]
+
+[ext_resource type="Script" path="res://scripts/shards/shard.gd" id="1_shard"]
+
+[node name="Shard" type="Node3D"]
+script = ExtResource("1_shard")
