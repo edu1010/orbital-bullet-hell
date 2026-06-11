@@ -17,7 +17,10 @@ func _ready() -> void:
 	shard_drop_min = 2
 	shard_drop_max = 5
 	mesh_shape = "box"
-	visual_color = Color(1.0, 0.62, 0.1)
+	visual_style = "charger_mask"
+	visual_color = Color(1.0, 0.55, 0.18)
+	accent_color = Color(0.92, 1.0, 0.22)
+	dark_color = Color(0.045, 0.028, 0.02)
 	spin_speed = 2.2
 	super._ready()
 

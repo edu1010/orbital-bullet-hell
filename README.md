@@ -2,6 +2,8 @@
 
 Godot 4 first-person arena shooter / bullet-hell survival prototype using only primitive meshes and generated UI/effects. The arena is now a hollow abstract sphere: the player runs on the inside surface with radial gravity.
 
+Enemy visuals are generated from primitive low-poly pieces: dark cores, warm faceted masks, neon crystal accents, and shard-like silhouettes. No external or copyrighted assets are used.
+
 ## Launch
 
 Open this folder in Godot 4.x and run `res://scenes/Main.tscn` or press Play. The project main scene is already set in `project.godot`.
@@ -11,7 +13,8 @@ Open this folder in Godot 4.x and run `res://scenes/Main.tscn` or press Play. Th
 - WASD: move
 - Mouse: look / aim
 - Space: jump, double jump, enemy-platform jump
-- Right mouse or Shift: fire extra shot when charged
+- Right mouse: fire extra shot when charged
+- Shift: boost when charged
 - Esc: pause
 - R: restart from game over
 
@@ -25,7 +28,7 @@ Primary fire is automatic while a run is active.
 - `scenes/shards/Shard.tscn`: pooled score pickup
 - `scenes/effects/BurstEffect.tscn`: pooled greybox burst effect
 - `scripts/game_manager.gd`: run state, pooling, scoring, collision severity, enemy-platform checks, bombs, extra shot
-- `scripts/spawn_manager.gd`: spawn pacing, tangent-plane spawn bias, enemy mix
+- `scripts/spawn_manager.gd`: spawn pacing, whole-sphere outside spawns, enemy mix
 - `scripts/main.gd`: generated spherical arena shell and interior grid
 - `scripts/ui/game_ui.gd`: HUD, menu, pause, game over, damage/ready feedback
 

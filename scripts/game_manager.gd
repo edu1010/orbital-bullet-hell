@@ -8,16 +8,16 @@ enum RunState { MENU, PLAYING, PAUSED, GAME_OVER }
 # Central run coordinator: owns state, score, combo, high score, pooled objects,
 # and cross-system collision rules that are cheaper as distance checks.
 @export_group("Pools")
-@export var max_active_enemies := 900
+@export var max_active_enemies := 1600
 @export var max_active_projectiles := 180
 @export var max_active_shards := 700
 @export var projectile_pool_initial := 90
 @export var shard_pool_initial := 180
 @export var effect_pool_initial := 36
-@export var swarmer_pool_initial := 120
-@export var charger_pool_initial := 44
-@export var avoider_pool_initial := 44
-@export var bomb_pool_initial := 12
+@export var swarmer_pool_initial := 260
+@export var charger_pool_initial := 80
+@export var avoider_pool_initial := 80
+@export var bomb_pool_initial := 16
 
 @export_group("Scoring")
 @export var shard_base_value := 5
@@ -454,6 +454,9 @@ func _update_ui() -> void:
 		"max_hp": player.max_hp,
 		"charge": player.extra_charge,
 		"charge_max": player.extra_shot_charge_max,
+		"boost": player.boost_charge,
+		"boost_max": player.boost_charge_max,
+		"boost_active": player.boost_timer > 0.0,
 		"combo": combo,
 		"time": survival_time,
 		"enemies": active_enemy_count(),

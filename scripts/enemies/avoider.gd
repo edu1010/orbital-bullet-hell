@@ -17,7 +17,10 @@ func _ready() -> void:
 	shard_drop_min = 1
 	shard_drop_max = 4
 	mesh_shape = "cone"
-	visual_color = Color(0.2, 1.0, 0.74)
+	visual_style = "avoider_shard"
+	visual_color = Color(0.72, 0.86, 0.32)
+	accent_color = Color(1.0, 0.05, 0.72)
+	dark_color = Color(0.015, 0.04, 0.055)
 	spin_speed = 4.0
 	super._ready()
 

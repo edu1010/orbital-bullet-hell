@@ -1,24 +1,22 @@
 class_name SpawnManager
 extends Node
 
-# Spawns bias toward where the player is looking and moving, then ramps cadence
-# and batch size by survival time and score.
+# Spawns are distributed across the whole sphere, then ramp cadence and batch
+# size by survival time and score.
 @export_group("Spawn Rate")
-@export var base_spawn_interval := 1.25
-@export var min_spawn_interval := 0.08
+@export var base_spawn_interval := 0.62
+@export var min_spawn_interval := 0.035
 @export var difficulty_time_scale := 0.035
 @export var difficulty_score_scale := 0.000035
-@export var batch_size_min := 4
-@export var batch_size_max := 10
-@export var batch_growth_per_minute := 18.0
-@export var active_count_soft_cap := 820
+@export var batch_size_min := 14
+@export var batch_size_max := 26
+@export var batch_growth_per_minute := 46.0
+@export var active_count_soft_cap := 1450
 
 @export_group("Spawn Placement")
-@export var spawn_distance_min := 34.0
-@export var spawn_distance_max := 62.0
-@export var spawn_arc_degrees := 100.0
-@export var facing_bias := 1.0
-@export var movement_bias := 0.65
+@export var outside_sphere_spawn_min := 8.0
+@export var outside_sphere_spawn_max := 24.0
+@export var min_angle_from_player_feet_degrees := 28.0
 @export var spawn_height_min := 0.45
 @export var spawn_height_max := 3.2
 
@@ -76,7 +74,7 @@ func _spawn_wave() -> void:
 	var count := randi_range(batch_size_min, batch_size_max) + growth
 	count = mini(count, manager.max_active_enemies - manager.active_enemy_count())
 	for i in range(count):
-		manager.spawn_enemy(_pick_enemy_type(), _pick_spawn_position(randf_range(spawn_height_min, spawn_height_max)))
+		manager.spawn_enemy(_pick_enemy_type(), _pick_outside_spawn_position())
 
 
 func _spawn_bomb() -> void:
@@ -100,15 +98,33 @@ func _pick_enemy_type() -> String:
 
 
 func _pick_spawn_position(altitude_from_wall: float) -> Vector3:
-	var forward: Vector3 = player.get_tangent_forward()
-	var movement: Vector3 = player.get_horizontal_velocity_direction()
-	var random_dir: Vector3 = player.get_random_tangent_direction()
-	var bias: Vector3 = forward * facing_bias + movement * movement_bias + random_dir * 0.35
-	if bias.length_squared() < 0.01:
-		bias = random_dir
-	bias = bias.normalized()
-	var angle: float = deg_to_rad(randf_range(-spawn_arc_degrees * 0.5, spawn_arc_degrees * 0.5))
-	var direction: Vector3 = bias.rotated(player.get_gravity_down(), angle).normalized()
-	var distance: float = randf_range(spawn_distance_min, spawn_distance_max)
-	var approximate_position: Vector3 = player.global_position + direction * distance
-	return player.project_inside_sphere(approximate_position, altitude_from_wall)
+	var direction: Vector3 = _pick_global_sphere_direction()
+	var radius: float = max(1.0, player.sphere_radius - altitude_from_wall)
+	return player.sphere_center + direction * radius
+
+
+func _pick_outside_spawn_position() -> Vector3:
+	var direction: Vector3 = _pick_global_sphere_direction()
+	var outside_distance: float = randf_range(outside_sphere_spawn_min, outside_sphere_spawn_max)
+	return player.sphere_center + direction * (player.sphere_radius + outside_distance)
+
+
+func _pick_global_sphere_direction() -> Vector3:
+	var player_feet_direction: Vector3 = player.get_gravity_down().normalized()
+	var max_feet_dot: float = cos(deg_to_rad(min_angle_from_player_feet_degrees))
+	for i in range(16):
+		var direction: Vector3 = _random_sphere_direction()
+		if direction.dot(player_feet_direction) <= max_feet_dot:
+			return direction
+	return -player_feet_direction
+
+
+func _random_sphere_direction() -> Vector3:
+	var y: float = randf_range(-1.0, 1.0)
+	var angle: float = randf_range(0.0, TAU)
+	var ring_radius: float = sqrt(max(0.0, 1.0 - y * y))
+	return Vector3(
+		ring_radius * cos(angle),
+		y,
+		ring_radius * sin(angle)
+	).normalized()

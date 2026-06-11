@@ -21,7 +21,10 @@ func _ready() -> void:
 	shard_drop_max = 12
 	can_be_platform = false
 	mesh_shape = "cylinder"
-	visual_color = Color(0.75, 0.32, 1.0)
+	visual_style = "bomb_relic"
+	visual_color = Color(0.92, 0.44, 0.2)
+	accent_color = Color(0.5, 1.0, 0.16)
+	dark_color = Color(0.04, 0.02, 0.055)
 	spin_speed = 1.4
 	max_lifetime = 34.0
 	super._ready()

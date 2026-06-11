@@ -11,7 +11,10 @@ func _ready() -> void:
 	shard_drop_min = 1
 	shard_drop_max = 3
 	mesh_shape = "sphere"
-	visual_color = Color(1.0, 0.16, 0.28)
+	visual_style = "swarm_mask"
+	visual_color = Color(0.86, 0.68, 0.48)
+	accent_color = Color(0.55, 1.0, 0.2)
+	dark_color = Color(0.035, 0.028, 0.04)
 	spin_speed = 5.5
 	super._ready()
 

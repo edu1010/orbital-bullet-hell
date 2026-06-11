@@ -4,12 +4,12 @@ extends CharacterBody3D
 # Arcade first-person controller with coyote time, buffered jumps, double jump,
 # enemy-body platform resets, automatic primary fire, and charged extra shot.
 @export_group("Movement")
-@export var move_speed := 15.5
-@export var ground_acceleration := 16.0
-@export var air_acceleration := 8.5
+@export var move_speed := 19.0
+@export var ground_acceleration := 20.0
+@export var air_acceleration := 11.0
 @export var ground_friction := 12.0
-@export var gravity := 20.0
-@export var jump_force := 9.2
+@export var gravity := 22.0
+@export var jump_force := 12.4
 @export var double_jump_count := 1
 @export var enemy_jump_resets := true
 @export var coyote_time := 0.14
@@ -49,6 +49,16 @@ extends CharacterBody3D
 @export var extra_shot_radius := 5.0
 @export var extra_shot_range := 88.0
 
+@export_group("Boost")
+@export var boost_charge_max := 100.0
+@export var boost_kill_charge_bonus := 3.2
+@export var boost_bomb_kill_charge_bonus := 0.9
+@export var boost_combo_charge_bonus_scale := 0.05
+@export var boost_duration := 0.58
+@export var boost_speed_multiplier := 2.25
+@export var boost_acceleration := 38.0
+@export var boost_impulse := 18.0
+
 @onready var head: Node3D = $Head
 @onready var camera: Camera3D = $Head/Camera3D
 @onready var muzzle: Marker3D = $Head/Muzzle
@@ -56,6 +66,8 @@ extends CharacterBody3D
 var manager: GameManager
 var hp := 3.0
 var extra_charge := 0.0
+var boost_charge := 0.0
+var boost_timer := 0.0
 var invulnerability_timer := 0.0
 var jump_buffer_timer := 0.0
 var coyote_timer := 0.0
@@ -68,6 +80,7 @@ var shake_strength := 0.0
 var camera_base_position := Vector3.ZERO
 var current_platform_enemy: EnemyBase
 var ready_cue_played := false
+var boost_ready_cue_played := false
 var gravity_down := Vector3.DOWN
 var on_gravity_floor := false
 
@@ -97,6 +110,8 @@ func reset_for_run(start_position: Vector3) -> void:
 	velocity = Vector3.ZERO
 	hp = max_hp
 	extra_charge = 0.0
+	boost_charge = 0.0
+	boost_timer = 0.0
 	invulnerability_timer = 0.0
 	jump_buffer_timer = 0.0
 	coyote_timer = coyote_time
@@ -107,6 +122,7 @@ func reset_for_run(start_position: Vector3) -> void:
 	shake_strength = 0.0
 	current_platform_enemy = null
 	ready_cue_played = false
+	boost_ready_cue_played = false
 	on_gravity_floor = true
 	gravity_down = _target_gravity_down()
 	up_direction = -gravity_down
@@ -126,7 +142,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode == KEY_SPACE:
 			jump_buffer_timer = jump_buffer_time
 		elif event.keycode == KEY_SHIFT:
-			try_fire_extra()
+			try_boost()
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
 		try_fire_extra()
 
@@ -135,6 +151,7 @@ func _physics_process(delta: float) -> void:
 	if not manager or not manager.is_playing():
 		return
 	# Movement and platform detection are intentionally permissive for a floaty feel.
+	boost_timer = max(0.0, boost_timer - delta)
 	_update_gravity(delta)
 	_update_timers(delta)
 	_apply_arcade_movement(delta)
@@ -161,10 +178,14 @@ func _apply_arcade_movement(delta: float) -> void:
 	var input := _read_move_input()
 	var forward: Vector3 = get_tangent_forward()
 	var right: Vector3 = get_tangent_right()
-	var desired: Vector3 = (right * input.x + forward * -input.y).normalized() * move_speed
+	var move_direction: Vector3 = right * input.x + forward * -input.y
+	if boost_timer > 0.0 and move_direction.length_squared() <= 0.001:
+		move_direction = forward
+	var target_speed: float = move_speed * (boost_speed_multiplier if boost_timer > 0.0 else 1.0)
+	var desired: Vector3 = move_direction.normalized() * target_speed
 	var tangent_velocity: Vector3 = velocity.slide(gravity_down)
 	var down_speed: float = velocity.dot(gravity_down)
-	var acceleration: float = ground_acceleration if _is_grounded() else air_acceleration
+	var acceleration: float = boost_acceleration if boost_timer > 0.0 else (ground_acceleration if _is_grounded() else air_acceleration)
 	if desired.length_squared() > 0.0:
 		tangent_velocity = tangent_velocity.lerp(desired, clamp(acceleration * delta, 0.0, 1.0))
 	else:
@@ -255,6 +276,20 @@ func try_fire_extra() -> void:
 	add_camera_shake(0.3, 0.18)
 
 
+func try_boost() -> void:
+	if boost_charge < boost_charge_max:
+		return
+	boost_charge = 0.0
+	boost_ready_cue_played = false
+	boost_timer = boost_duration
+	var boost_direction: Vector3 = _current_intended_boost_direction()
+	velocity += boost_direction * boost_impulse
+	fov_kick = max(fov_kick, 15.0)
+	add_camera_shake(0.16, 0.12)
+	if manager and manager.ui:
+		manager.ui.boost_feedback()
+
+
 func add_extra_charge(amount: float) -> void:
 	if amount <= 0.0 or extra_charge >= extra_shot_charge_max:
 		return
@@ -265,12 +300,26 @@ func add_extra_charge(amount: float) -> void:
 			manager.ui.extra_ready_feedback()
 
 
+func add_boost_charge(amount: float) -> void:
+	if amount <= 0.0 or boost_charge >= boost_charge_max:
+		return
+	boost_charge = min(boost_charge_max, boost_charge + amount)
+	if boost_charge >= boost_charge_max and not boost_ready_cue_played:
+		boost_ready_cue_played = true
+		if manager and manager.ui:
+			manager.ui.boost_ready_feedback()
+
+
 func add_kill_charge(source: String, current_combo: float) -> void:
 	var gain: float = kill_charge_bonus
+	var boost_gain: float = boost_kill_charge_bonus
 	if source == "bomb":
 		gain = bomb_kill_charge_bonus
+		boost_gain = boost_bomb_kill_charge_bonus
 	var combo_bonus: float = 1.0 + max(0.0, current_combo - 1.0) * combo_charge_bonus_scale
+	var boost_combo_bonus: float = 1.0 + max(0.0, current_combo - 1.0) * boost_combo_charge_bonus_scale
 	add_extra_charge(gain * combo_bonus)
+	add_boost_charge(boost_gain * boost_combo_bonus)
 
 
 func apply_damage(amount: float, hit_position: Vector3) -> bool:
@@ -375,6 +424,21 @@ func project_inside_sphere(approx_position: Vector3, altitude_from_wall: float) 
 	var down_at_position: Vector3 = radial.normalized()
 	var distance_from_center: float = max(1.0, sphere_radius - altitude_from_wall)
 	return sphere_center + down_at_position * distance_from_center
+
+
+func project_outside_sphere(approx_position: Vector3, outside_distance: float) -> Vector3:
+	var radial: Vector3 = approx_position - sphere_center
+	if radial.length_squared() <= 0.001:
+		radial = gravity_down
+	return sphere_center + radial.normalized() * (sphere_radius + outside_distance)
+
+
+func _current_intended_boost_direction() -> Vector3:
+	var input: Vector2 = _read_move_input()
+	var direction: Vector3 = get_tangent_right() * input.x + get_tangent_forward() * -input.y
+	if direction.length_squared() <= 0.001:
+		direction = get_tangent_forward()
+	return direction.normalized()
 
 
 func _update_gravity(delta: float) -> void:
