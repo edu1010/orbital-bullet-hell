@@ -17,6 +17,12 @@ extends CharacterBody3D
 @export var enemy_platform_radius := 0.55
 @export var body_half_height := 0.9
 
+@export_group("Spherical Gravity")
+@export var sphere_center := Vector3.ZERO
+@export var sphere_radius := 120.0
+@export var gravity_lerp_speed := 7.0
+@export var surface_snap_margin := 0.75
+
 @export_group("Look")
 @export var mouse_sensitivity := 0.0022
 @export var max_pitch_degrees := 84.0
@@ -62,16 +68,24 @@ var shake_strength := 0.0
 var camera_base_position := Vector3.ZERO
 var current_platform_enemy: EnemyBase
 var ready_cue_played := false
+var gravity_down := Vector3.DOWN
+var on_gravity_floor := false
 
 
 func configure(_manager: GameManager) -> void:
 	manager = _manager
 
 
+func set_spherical_world(center: Vector3, radius: float) -> void:
+	sphere_center = center
+	sphere_radius = radius
+
+
 func _ready() -> void:
 	camera_base_position = camera.position
 	camera.fov = base_fov
 	hp = max_hp
+	up_direction = -gravity_down
 	set_physics_process(true)
 
 
@@ -93,6 +107,10 @@ func reset_for_run(start_position: Vector3) -> void:
 	shake_strength = 0.0
 	current_platform_enemy = null
 	ready_cue_played = false
+	on_gravity_floor = true
+	gravity_down = _target_gravity_down()
+	up_direction = -gravity_down
+	_align_body_to_gravity(1.0)
 	camera.position = camera_base_position
 	camera.fov = base_fov
 
@@ -101,7 +119,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not manager or not manager.is_playing():
 		return
 	if event is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
-		rotate_y(-event.relative.x * mouse_sensitivity)
+		rotate_object_local(Vector3.UP, -event.relative.x * mouse_sensitivity)
 		pitch = clamp(pitch - event.relative.y * mouse_sensitivity, -deg_to_rad(max_pitch_degrees), deg_to_rad(max_pitch_degrees))
 		head.rotation.x = pitch
 	elif event is InputEventKey and event.pressed and not event.echo:
@@ -117,10 +135,12 @@ func _physics_process(delta: float) -> void:
 	if not manager or not manager.is_playing():
 		return
 	# Movement and platform detection are intentionally permissive for a floaty feel.
+	_update_gravity(delta)
 	_update_timers(delta)
 	_apply_arcade_movement(delta)
 	_handle_jump_buffer()
 	move_and_slide()
+	_constrain_to_sphere()
 	_update_enemy_platform()
 	_update_auto_fire(delta)
 	add_extra_charge(passive_charge_rate * delta)
@@ -130,7 +150,7 @@ func _physics_process(delta: float) -> void:
 func _update_timers(delta: float) -> void:
 	invulnerability_timer = max(0.0, invulnerability_timer - delta)
 	jump_buffer_timer = max(0.0, jump_buffer_timer - delta)
-	if is_on_floor() or current_platform_enemy != null:
+	if _is_grounded():
 		coyote_timer = coyote_time
 		jumps_remaining = double_jump_count
 	else:
@@ -139,25 +159,21 @@ func _update_timers(delta: float) -> void:
 
 func _apply_arcade_movement(delta: float) -> void:
 	var input := _read_move_input()
-	var forward := -global_transform.basis.z
-	forward.y = 0.0
-	forward = forward.normalized()
-	var right := global_transform.basis.x
-	right.y = 0.0
-	right = right.normalized()
-	var desired := (right * input.x + forward * -input.y).normalized() * move_speed
-	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
-	var acceleration: float = ground_acceleration if is_on_floor() or current_platform_enemy != null else air_acceleration
+	var forward: Vector3 = get_tangent_forward()
+	var right: Vector3 = get_tangent_right()
+	var desired: Vector3 = (right * input.x + forward * -input.y).normalized() * move_speed
+	var tangent_velocity: Vector3 = velocity.slide(gravity_down)
+	var down_speed: float = velocity.dot(gravity_down)
+	var acceleration: float = ground_acceleration if _is_grounded() else air_acceleration
 	if desired.length_squared() > 0.0:
-		horizontal = horizontal.lerp(desired, clamp(acceleration * delta, 0.0, 1.0))
+		tangent_velocity = tangent_velocity.lerp(desired, clamp(acceleration * delta, 0.0, 1.0))
 	else:
-		horizontal = horizontal.lerp(Vector3.ZERO, clamp(ground_friction * delta, 0.0, 1.0))
-	velocity.x = horizontal.x
-	velocity.z = horizontal.z
-	if not is_on_floor() and current_platform_enemy == null:
-		velocity.y -= gravity * delta
-	elif velocity.y < 0.0:
-		velocity.y = 0.0
+		tangent_velocity = tangent_velocity.lerp(Vector3.ZERO, clamp(ground_friction * delta, 0.0, 1.0))
+	if not _is_grounded():
+		down_speed += gravity * delta
+	elif down_speed > 0.0:
+		down_speed = 0.0
+	velocity = tangent_velocity + gravity_down * down_speed
 
 
 func _read_move_input() -> Vector2:
@@ -183,7 +199,8 @@ func _handle_jump_buffer() -> void:
 
 
 func _do_jump(air_jump: bool) -> void:
-	velocity.y = jump_force
+	var tangent_velocity: Vector3 = velocity.slide(gravity_down)
+	velocity = tangent_velocity - gravity_down * jump_force
 	jump_buffer_timer = 0.0
 	if air_jump:
 		jumps_remaining -= 1
@@ -196,16 +213,17 @@ func _update_enemy_platform() -> void:
 	# Enemy platforms are simulated with a top-surface distance check instead of
 	# heavy physics bodies, keeping large swarms practical for a prototype.
 	current_platform_enemy = null
-	if not enemy_jump_resets or velocity.y > 1.5:
+	if not enemy_jump_resets or velocity.dot(gravity_down) < -1.5:
 		return
-	var feet_y: float = global_position.y - body_half_height
-	var enemy: EnemyBase = manager.find_enemy_platform(global_position, feet_y, enemy_platform_radius)
+	var feet_position: Vector3 = global_position + gravity_down * body_half_height
+	var enemy: EnemyBase = manager.find_enemy_platform(feet_position, gravity_down, enemy_platform_radius)
 	if not enemy:
 		return
-	var top_y: float = enemy.global_position.y + enemy.platform_height
-	global_position.y = top_y + body_half_height
-	if velocity.y < 0.0:
-		velocity.y = 0.0
+	var top_point: Vector3 = enemy.global_position - gravity_down * enemy.platform_height
+	global_position = top_point - gravity_down * body_half_height
+	var down_speed: float = velocity.dot(gravity_down)
+	if down_speed > 0.0:
+		velocity -= gravity_down * down_speed
 	current_platform_enemy = enemy
 	coyote_timer = coyote_time
 	jumps_remaining = double_jump_count
@@ -222,14 +240,14 @@ func _update_auto_fire(delta: float) -> void:
 
 
 func _fire_primary() -> void:
-	var direction := -camera.global_transform.basis.z.normalized()
+	var direction: Vector3 = -camera.global_transform.basis.z.normalized()
 	manager.request_projectile(muzzle.global_position, direction, projectile_speed)
 
 
 func try_fire_extra() -> void:
 	if extra_charge < extra_shot_charge_max:
 		return
-	var direction := -camera.global_transform.basis.z.normalized()
+	var direction: Vector3 = -camera.global_transform.basis.z.normalized()
 	manager.perform_extra_shot(camera.global_position, direction, extra_shot_radius, extra_shot_range)
 	extra_charge = 0.0
 	ready_cue_played = false
@@ -261,7 +279,7 @@ func apply_damage(amount: float, hit_position: Vector3) -> bool:
 	hp = max(0.0, hp - amount)
 	invulnerability_timer = invulnerability_time
 	var away: Vector3 = global_position - hit_position
-	away.y = 0.0
+	away = away.slide(gravity_down)
 	if away.length_squared() > 0.01:
 		velocity += away.normalized() * 4.0
 	add_camera_shake(0.28 if amount >= 1.0 else 0.16, 0.22)
@@ -290,7 +308,7 @@ func add_camera_shake(strength: float, duration: float) -> void:
 
 
 func _update_camera_feedback(delta: float) -> void:
-	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
+	var horizontal_speed: float = velocity.slide(gravity_down).length()
 	var speed_fov: float = clamp(horizontal_speed / move_speed, 0.0, 1.35) * movement_fov_kick
 	fov_kick = move_toward(fov_kick, 0.0, action_fov_recovery * delta)
 	camera.fov = lerp(camera.fov, base_fov + speed_fov + fov_kick, clamp(9.0 * delta, 0.0, 1.0))
@@ -313,7 +331,102 @@ func get_view_basis() -> Basis:
 
 
 func get_horizontal_velocity_direction() -> Vector3:
-	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
+	var horizontal: Vector3 = velocity.slide(gravity_down)
 	if horizontal.length_squared() <= 0.01:
 		return Vector3.ZERO
 	return horizontal.normalized()
+
+
+func get_gravity_down() -> Vector3:
+	return gravity_down
+
+
+func get_tangent_forward() -> Vector3:
+	var forward: Vector3 = -global_transform.basis.z
+	forward = forward.slide(gravity_down)
+	if forward.length_squared() <= 0.001:
+		forward = (-gravity_down).cross(get_tangent_right())
+	return forward.normalized()
+
+
+func get_tangent_right() -> Vector3:
+	var right: Vector3 = global_transform.basis.x
+	right = right.slide(gravity_down)
+	if right.length_squared() <= 0.001:
+		right = gravity_down.cross(Vector3.UP)
+		if right.length_squared() <= 0.001:
+			right = gravity_down.cross(Vector3.RIGHT)
+	return right.normalized()
+
+
+func get_random_tangent_direction() -> Vector3:
+	var angle: float = randf_range(0.0, TAU)
+	return (get_tangent_right() * cos(angle) + get_tangent_forward() * sin(angle)).normalized()
+
+
+func get_default_spawn_position() -> Vector3:
+	return sphere_center + Vector3.BACK * max(1.0, sphere_radius - body_half_height)
+
+
+func project_inside_sphere(approx_position: Vector3, altitude_from_wall: float) -> Vector3:
+	var radial: Vector3 = approx_position - sphere_center
+	if radial.length_squared() <= 0.001:
+		radial = gravity_down
+	var down_at_position: Vector3 = radial.normalized()
+	var distance_from_center: float = max(1.0, sphere_radius - altitude_from_wall)
+	return sphere_center + down_at_position * distance_from_center
+
+
+func _update_gravity(delta: float) -> void:
+	var target_down: Vector3 = _target_gravity_down()
+	var blend: float = clamp(gravity_lerp_speed * delta, 0.0, 1.0)
+	gravity_down = gravity_down.slerp(target_down, blend).normalized()
+	up_direction = -gravity_down
+	_align_body_to_gravity(blend)
+
+
+func _target_gravity_down() -> Vector3:
+	var radial: Vector3 = global_position - sphere_center
+	if radial.length_squared() <= 0.001:
+		return gravity_down
+	return radial.normalized()
+
+
+func _align_body_to_gravity(blend: float) -> void:
+	var target_up: Vector3 = -gravity_down
+	var forward: Vector3 = -global_transform.basis.z
+	forward = forward.slide(gravity_down)
+	if forward.length_squared() <= 0.001:
+		forward = target_up.cross(get_tangent_right())
+	forward = forward.normalized()
+	var target_basis: Basis = Basis.looking_at(forward, target_up).orthonormalized()
+	if blend >= 1.0:
+		global_transform.basis = target_basis
+	else:
+		var current_quat: Quaternion = global_transform.basis.get_rotation_quaternion()
+		var target_quat: Quaternion = target_basis.get_rotation_quaternion()
+		global_transform.basis = Basis(current_quat.slerp(target_quat, blend)).orthonormalized()
+
+
+func _constrain_to_sphere() -> void:
+	on_gravity_floor = false
+	var radial: Vector3 = global_position - sphere_center
+	if radial.length_squared() <= 0.001:
+		return
+	var distance: float = radial.length()
+	var max_distance: float = max(1.0, sphere_radius - body_half_height)
+	var wall_down: Vector3 = radial / distance
+	if distance >= max_distance:
+		global_position = sphere_center + wall_down * max_distance
+		gravity_down = wall_down
+		up_direction = -gravity_down
+		var down_speed: float = velocity.dot(gravity_down)
+		if down_speed > 0.0:
+			velocity -= gravity_down * down_speed
+		on_gravity_floor = true
+	elif max_distance - distance <= surface_snap_margin and velocity.dot(gravity_down) >= 0.0:
+		on_gravity_floor = true
+
+
+func _is_grounded() -> bool:
+	return on_gravity_floor or current_platform_enemy != null or is_on_floor()

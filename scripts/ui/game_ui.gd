@@ -99,11 +99,15 @@ func _build_ui() -> void:
 
 	hud = VBoxContainer.new()
 	hud.position = Vector2(18.0, 14.0)
+	hud.z_index = 20
 	hud.add_theme_constant_override("separation", 4)
 	root.add_child(hud)
 
-	score_label = _make_label()
-	high_score_label = _make_label()
+	score_label = _make_label(32)
+	score_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.28))
+	score_label.add_theme_constant_override("shadow_offset_x", 2)
+	score_label.add_theme_constant_override("shadow_offset_y", 2)
+	high_score_label = _make_label(16)
 	hp_label = _make_label()
 	charge_label = _make_label()
 	combo_label = _make_label()
@@ -129,11 +133,13 @@ func _build_ui() -> void:
 	ready_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ready_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	ready_label.position.y = 42.0
+	ready_label.z_index = 21
 	ready_label.modulate = Color(0.55, 0.95, 1.0, 0.0)
 	root.add_child(ready_label)
 
 	overlay = ColorRect.new()
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.z_index = 5
 	overlay.color = Color(0.0, 0.0, 0.0, 0.62)
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(overlay)
@@ -146,6 +152,7 @@ func _build_ui() -> void:
 
 	flash_rect = ColorRect.new()
 	flash_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	flash_rect.z_index = 15
 	flash_rect.color = Color(1.0, 0.0, 0.0, 0.0)
 	flash_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(flash_rect)

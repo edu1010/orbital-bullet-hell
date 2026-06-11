@@ -33,11 +33,11 @@ func _update_movement(delta: float) -> void:
 	var to_target: Vector3 = target - global_position
 	if to_target.length_squared() <= 0.001:
 		return
-	var direction := to_target.normalized()
-	var lateral := direction.cross(Vector3.UP)
+	var direction: Vector3 = to_target.normalized()
+	var lateral: Vector3 = direction.cross(Vector3.UP)
 	if lateral.length_squared() <= 0.001:
 		lateral = Vector3.RIGHT
 	lateral = lateral.normalized()
-	var wave := lateral * sin(age * wave_frequency + phase) * wave_strength
-	var desired := direction * move_speed + wave
+	var wave: Vector3 = lateral * sin(age * wave_frequency + phase) * wave_strength
+	var desired: Vector3 = direction * move_speed + wave
 	velocity = velocity.lerp(desired, clamp(turn_speed * delta, 0.0, 1.0))

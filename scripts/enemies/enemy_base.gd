@@ -73,7 +73,7 @@ func _physics_process(delta: float) -> void:
 
 
 func _update_movement(_delta: float) -> void:
-	var desired := _direction_to_player() * move_speed
+	var desired: Vector3 = _direction_to_player() * move_speed
 	velocity = velocity.lerp(desired, 0.2)
 
 

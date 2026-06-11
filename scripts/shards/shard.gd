@@ -2,10 +2,12 @@ class_name ScoreShard
 extends Node3D
 
 @export var lifetime := 7.5
-@export var attract_radius := 9.0
-@export var collect_radius := 1.05
+@export var attract_radius := 12.0
+@export var collect_radius := 1.3
 @export var attract_acceleration := 34.0
 @export var damping := 2.1
+@export var visual_size := 0.52
+@export var pulse_amount := 0.18
 
 var manager: GameManager
 var player: PlayerController
@@ -60,6 +62,7 @@ func _physics_process(delta: float) -> void:
 		velocity += to_player.normalized() * attract_acceleration * pull * delta
 	velocity = velocity.lerp(Vector3.ZERO, clamp(damping * delta, 0.0, 0.8))
 	global_position += velocity * delta
+	visual.scale = Vector3.ONE * (1.0 + sin(age * 9.0) * pulse_amount)
 	rotate_y(8.0 * delta)
 	rotate_x(5.0 * delta)
 
@@ -67,13 +70,14 @@ func _physics_process(delta: float) -> void:
 func _create_visual() -> void:
 	visual = MeshInstance3D.new()
 	var mesh := BoxMesh.new()
-	mesh.size = Vector3(0.18, 0.18, 0.18)
+	mesh.size = Vector3.ONE * visual_size
 	visual.mesh = mesh
+	visual.rotation_degrees = Vector3(45.0, 0.0, 45.0)
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_color = Color(1.0, 0.92, 0.26)
+	material.albedo_color = Color(1.0, 0.96, 0.18)
 	material.emission_enabled = true
-	material.emission = Color(1.0, 0.82, 0.18)
-	material.emission_energy_multiplier = 1.2
+	material.emission = Color(1.0, 0.9, 0.08)
+	material.emission_energy_multiplier = 2.4
 	visual.material_override = material
 	add_child(visual)

@@ -17,5 +17,5 @@ func _ready() -> void:
 
 
 func _update_movement(delta: float) -> void:
-	var desired := _direction_to_player() * move_speed
+	var desired: Vector3 = _direction_to_player() * move_speed
 	velocity = velocity.lerp(desired, clamp(turn_speed * delta, 0.0, 1.0))

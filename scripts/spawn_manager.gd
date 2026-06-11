@@ -76,14 +76,13 @@ func _spawn_wave() -> void:
 	var count := randi_range(batch_size_min, batch_size_max) + growth
 	count = mini(count, manager.max_active_enemies - manager.active_enemy_count())
 	for i in range(count):
-		manager.spawn_enemy(_pick_enemy_type(), _pick_spawn_position())
+		manager.spawn_enemy(_pick_enemy_type(), _pick_spawn_position(randf_range(spawn_height_min, spawn_height_max)))
 
 
 func _spawn_bomb() -> void:
 	if manager.active_enemy_count() >= manager.max_active_enemies:
 		return
-	var position := _pick_spawn_position()
-	position.y = randf_range(bomb_height_min, bomb_height_max)
+	var position: Vector3 = _pick_spawn_position(randf_range(bomb_height_min, bomb_height_max))
 	manager.spawn_bomb(position)
 
 
@@ -100,18 +99,16 @@ func _pick_enemy_type() -> String:
 	return "swarmer"
 
 
-func _pick_spawn_position() -> Vector3:
-	var forward := -player.get_view_basis().z
-	forward.y = 0.0
-	forward = forward.normalized()
-	var movement := player.get_horizontal_velocity_direction()
-	var random_dir := Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0)).normalized()
-	var bias := forward * facing_bias + movement * movement_bias + random_dir * 0.35
+func _pick_spawn_position(altitude_from_wall: float) -> Vector3:
+	var forward: Vector3 = player.get_tangent_forward()
+	var movement: Vector3 = player.get_horizontal_velocity_direction()
+	var random_dir: Vector3 = player.get_random_tangent_direction()
+	var bias: Vector3 = forward * facing_bias + movement * movement_bias + random_dir * 0.35
 	if bias.length_squared() < 0.01:
 		bias = random_dir
 	bias = bias.normalized()
-	var angle := deg_to_rad(randf_range(-spawn_arc_degrees * 0.5, spawn_arc_degrees * 0.5))
-	var direction := bias.rotated(Vector3.UP, angle).normalized()
-	var distance := randf_range(spawn_distance_min, spawn_distance_max)
-	var height := randf_range(spawn_height_min, spawn_height_max)
-	return player.global_position + direction * distance + Vector3(0.0, height, 0.0)
+	var angle: float = deg_to_rad(randf_range(-spawn_arc_degrees * 0.5, spawn_arc_degrees * 0.5))
+	var direction: Vector3 = bias.rotated(player.get_gravity_down(), angle).normalized()
+	var distance: float = randf_range(spawn_distance_min, spawn_distance_max)
+	var approximate_position: Vector3 = player.global_position + direction * distance
+	return player.project_inside_sphere(approximate_position, altitude_from_wall)

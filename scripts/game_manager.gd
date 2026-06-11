@@ -100,7 +100,7 @@ func start_run() -> void:
 	combo_decay_timer = 0.0
 	survival_time = 0.0
 	state = RunState.PLAYING
-	player.reset_for_run(Vector3(0.0, 2.0, 0.0))
+	player.reset_for_run(player.get_default_spawn_position())
 	spawn_manager.reset_for_run()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	ui.show_state(state)
@@ -320,23 +320,22 @@ func get_nearby_projectiles(position: Vector3, radius: float) -> Array[PlayerPro
 	return nearby
 
 
-func find_enemy_platform(player_position: Vector3, feet_y: float, platform_radius: float) -> EnemyBase:
+func find_enemy_platform(feet_position: Vector3, gravity_down: Vector3, platform_radius: float) -> EnemyBase:
 	var best_enemy: EnemyBase = null
 	var best_delta := 999.0
 	for enemy in active_enemies:
 		if not enemy.active or not enemy.can_be_platform:
 			continue
-		var top_y: float = enemy.global_position.y + enemy.platform_height
-		var vertical_delta: float = abs(feet_y - top_y)
-		if feet_y > top_y + 0.45 or feet_y < top_y - 0.8:
+		var top_point: Vector3 = enemy.global_position - gravity_down * enemy.platform_height
+		var delta_to_top: Vector3 = feet_position - top_point
+		var vertical_delta: float = delta_to_top.dot(gravity_down)
+		if vertical_delta > 0.45 or vertical_delta < -0.8:
 			continue
-		var horizontal := Vector2(
-			player_position.x - enemy.global_position.x,
-			player_position.z - enemy.global_position.z
-		)
-		var allowed := platform_radius + enemy.body_radius
-		if horizontal.length_squared() <= allowed * allowed and vertical_delta < best_delta:
-			best_delta = vertical_delta
+		var horizontal: Vector3 = delta_to_top.slide(gravity_down)
+		var allowed: float = platform_radius + enemy.body_radius
+		var absolute_delta: float = abs(vertical_delta)
+		if horizontal.length_squared() <= allowed * allowed and absolute_delta < best_delta:
+			best_delta = absolute_delta
 			best_enemy = enemy
 	return best_enemy
 

@@ -1,8 +1,11 @@
 extends Node3D
 
-@export var arena_size := 2000.0
-@export var grid_spacing := 12.0
-@export var grid_line_count := 140
+@export var arena_radius := 120.0
+@export var sphere_segments := 96
+@export var sphere_rings := 48
+@export var grid_latitude_lines := 15
+@export var grid_longitude_lines := 32
+@export var grid_line_segments := 96
 
 @onready var arena: Node3D = $Arena
 @onready var game_manager: GameManager = $GameManager
@@ -19,6 +22,7 @@ func _ready() -> void:
 	randomize()
 	# The arena is generated at runtime so the scene stays small and easy to modify.
 	_build_arena()
+	player.set_spherical_world(Vector3.ZERO, arena_radius)
 	game_manager.configure(
 		player,
 		spawn_manager,
@@ -51,36 +55,49 @@ func _build_arena() -> void:
 	light.light_color = Color(0.72, 0.85, 1.0)
 	arena.add_child(light)
 
-	var ground_mesh := MeshInstance3D.new()
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(arena_size, arena_size)
-	ground_mesh.mesh = plane
-	var ground_material := StandardMaterial3D.new()
-	ground_material.albedo_color = Color(0.025, 0.028, 0.04)
-	ground_material.roughness = 0.8
-	ground_mesh.material_override = ground_material
-	arena.add_child(ground_mesh)
+	_build_sphere_shell()
+	_build_sphere_grid()
 
-	var ground_body := StaticBody3D.new()
-	var collision := CollisionShape3D.new()
-	var box := BoxShape3D.new()
-	box.size = Vector3(arena_size, 0.2, arena_size)
-	collision.shape = box
-	collision.position.y = -0.12
-	ground_body.add_child(collision)
-	arena.add_child(ground_body)
 
+func _build_sphere_shell() -> void:
+	var shell := MeshInstance3D.new()
+	var sphere := SphereMesh.new()
+	sphere.radius = arena_radius
+	sphere.height = arena_radius * 2.0
+	sphere.radial_segments = sphere_segments
+	sphere.rings = sphere_rings
+	shell.mesh = sphere
+	var shell_material := StandardMaterial3D.new()
+	shell_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	shell_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	shell_material.cull_mode = BaseMaterial3D.CULL_FRONT
+	shell_material.albedo_color = Color(0.025, 0.028, 0.045, 0.82)
+	shell_material.emission_enabled = true
+	shell_material.emission = Color(0.02, 0.04, 0.08)
+	shell_material.emission_energy_multiplier = 0.45
+	shell.material_override = shell_material
+	arena.add_child(shell)
+
+
+func _build_sphere_grid() -> void:
 	var grid := MeshInstance3D.new()
 	var immediate := ImmediateMesh.new()
 	immediate.surface_begin(Mesh.PRIMITIVE_LINES)
-	var half := grid_line_count * grid_spacing * 0.5
-	var half_lines := int(grid_line_count / 2)
-	for i in range(-half_lines, half_lines + 1):
-		var p := float(i) * grid_spacing
-		immediate.surface_add_vertex(Vector3(p, 0.035, -half))
-		immediate.surface_add_vertex(Vector3(p, 0.035, half))
-		immediate.surface_add_vertex(Vector3(-half, 0.035, p))
-		immediate.surface_add_vertex(Vector3(half, 0.035, p))
+	var grid_radius: float = arena_radius - 0.12
+	for lat_index in range(1, grid_latitude_lines):
+		var latitude: float = lerp(-PI * 0.5, PI * 0.5, float(lat_index) / float(grid_latitude_lines))
+		for segment in range(grid_line_segments):
+			var a0: float = TAU * float(segment) / float(grid_line_segments)
+			var a1: float = TAU * float(segment + 1) / float(grid_line_segments)
+			immediate.surface_add_vertex(_sphere_point(grid_radius, latitude, a0))
+			immediate.surface_add_vertex(_sphere_point(grid_radius, latitude, a1))
+	for lon_index in range(grid_longitude_lines):
+		var longitude: float = TAU * float(lon_index) / float(grid_longitude_lines)
+		for segment in range(grid_line_segments):
+			var t0: float = lerp(-PI * 0.5, PI * 0.5, float(segment) / float(grid_line_segments))
+			var t1: float = lerp(-PI * 0.5, PI * 0.5, float(segment + 1) / float(grid_line_segments))
+			immediate.surface_add_vertex(_sphere_point(grid_radius, t0, longitude))
+			immediate.surface_add_vertex(_sphere_point(grid_radius, t1, longitude))
 	immediate.surface_end()
 	grid.mesh = immediate
 	var grid_material := StandardMaterial3D.new()
@@ -92,3 +109,12 @@ func _build_arena() -> void:
 	grid_material.emission_energy_multiplier = 0.45
 	grid.material_override = grid_material
 	arena.add_child(grid)
+
+
+func _sphere_point(radius: float, latitude: float, longitude: float) -> Vector3:
+	var ring_radius: float = cos(latitude) * radius
+	return Vector3(
+		ring_radius * cos(longitude),
+		sin(latitude) * radius,
+		ring_radius * sin(longitude)
+	)

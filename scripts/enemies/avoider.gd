@@ -27,21 +27,21 @@ func _on_activated() -> void:
 
 
 func _update_movement(delta: float) -> void:
-	var chase := _direction_to_player() * move_speed
-	var avoid := Vector3.ZERO
+	var chase: Vector3 = _direction_to_player() * move_speed
+	var avoid: Vector3 = Vector3.ZERO
 	if manager:
 		for projectile in manager.get_nearby_projectiles(global_position, bullet_avoid_radius):
 			var away: Vector3 = global_position - projectile.global_position
 			var distance: float = max(0.01, away.length())
 			away.y *= 0.25
 			avoid += away.normalized() * (1.0 - clamp(distance / bullet_avoid_radius, 0.0, 1.0))
-	var lateral := _direction_to_player().cross(Vector3.UP)
+	var lateral: Vector3 = _direction_to_player().cross(Vector3.UP)
 	if lateral.length_squared() > 0.001:
 		lateral = lateral.normalized() * sin(age * lateral_frequency + phase) * 2.2
-	var desired := chase + lateral
+	var desired: Vector3 = chase + lateral
 	if avoid.length_squared() > 0.001:
 		desired += avoid.normalized() * bullet_avoid_strength
-	var max_speed := move_speed * 1.45
+	var max_speed: float = move_speed * 1.45
 	if desired.length() > max_speed:
 		desired = desired.normalized() * max_speed
 	velocity = velocity.lerp(desired, clamp(turn_speed * delta, 0.0, 1.0))
