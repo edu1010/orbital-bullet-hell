@@ -125,16 +125,19 @@ func _draw_gauge(center: Vector2, center_angle: float, fraction: float, color: C
 func _draw_warn(center: Vector2, angle: float, strength: float, is_bomb: bool, pulse: float) -> void:
 	var outward: Vector2 = Vector2(cos(angle), sin(angle))
 	var perpendicular: Vector2 = Vector2(-sin(angle), cos(angle))
-	var inner_radius: float = GAUGE_RADIUS + 14.0
-	var length: float = 9.0 + strength * 8.0
-	var half_width: float = 4.0 + strength * 3.0
-	var base_color: Color = Color(1.0, 0.35, 0.12) if is_bomb else Color(1.0, 0.74, 0.2)
-	var alpha: float = (0.35 + strength * 0.55) * (0.7 + pulse * 0.3)
+	var inner_radius: float = GAUGE_RADIUS + 13.0
+	var length: float = 11.0 + strength * 10.0
+	var half_width: float = 5.0 + strength * 4.0
+	# Red threat marker — visible early (faint when far) and intensifying as it nears.
+	var base_color: Color = Color(1.0, 0.12, 0.06) if is_bomb else Color(1.0, 0.22, 0.14)
+	var alpha: float = clamp(0.5 + strength * 0.5, 0.0, 1.0) * (0.78 + pulse * 0.22)
 	base_color.a = alpha
 	var tip: Vector2 = center + outward * (inner_radius + length)
 	var base_a: Vector2 = center + outward * inner_radius + perpendicular * half_width
 	var base_b: Vector2 = center + outward * inner_radius - perpendicular * half_width
 	draw_colored_polygon(PackedVector2Array([tip, base_a, base_b]), base_color)
+	# A faint red arc glow on that side so it reads even at the edge of awareness.
+	draw_arc(center, GAUGE_RADIUS + 5.0, angle - 0.5, angle + 0.5, 14, Color(1.0, 0.15, 0.1, alpha * 0.4), 4.0, true)
 
 
 func _draw_damage(center: Vector2, angle: float, life: float) -> void:

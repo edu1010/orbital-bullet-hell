@@ -18,11 +18,17 @@ extends Node3D
 @export var dark_color := Color(0.025, 0.02, 0.035)
 @export var spin_speed := 2.2
 
+@export var formation_speed := 26.0
+
 var manager: GameManager
 var player: PlayerController
 var active := false
 var velocity := Vector3.ZERO
 var age := 0.0
+# While in formation the enemy ignores its own AI and flies to a slot supplied by
+# the dragon boss, so the swarm can temporarily assemble into the dragon's body.
+var formation_active := false
+var formation_target := Vector3.ZERO
 var visual: Node3D
 var material: StandardMaterial3D
 var dark_material: StandardMaterial3D
@@ -42,6 +48,7 @@ func activate(_manager: GameManager, _player: PlayerController, spawn_position: 
 	age = 0.0
 	active = true
 	visible = true
+	formation_active = false
 	set_process(true)
 	set_physics_process(true)
 	_on_activated()
@@ -50,8 +57,21 @@ func activate(_manager: GameManager, _player: PlayerController, spawn_position: 
 func deactivate() -> void:
 	active = false
 	visible = false
+	formation_active = false
 	set_process(false)
 	set_physics_process(false)
+
+
+func enter_formation() -> void:
+	formation_active = true
+
+
+func exit_formation() -> void:
+	formation_active = false
+
+
+func set_formation_target(target: Vector3) -> void:
+	formation_target = target
 
 
 func kill(source: String = "primary", spawn_pickups: bool = true) -> void:
@@ -68,13 +88,26 @@ func _physics_process(delta: float) -> void:
 	if manager and not manager.is_playing():
 		return
 	age += delta
-	if age > max_lifetime or global_position.distance_to(player.global_position) > max_distance_from_player:
+	# Formation members skip lifetime/distance culling so the dragon stays intact.
+	if not formation_active and (age > max_lifetime or global_position.distance_to(player.global_position) > max_distance_from_player):
 		deactivate()
 		return
-	_update_movement(delta)
+	if formation_active:
+		_update_formation_movement(delta)
+	else:
+		_update_movement(delta)
 	global_position += velocity * delta
 	if visual:
 		visual.rotate_y(spin_speed * delta)
+
+
+func _update_formation_movement(delta: float) -> void:
+	var to_target: Vector3 = formation_target - global_position
+	var distance: float = to_target.length()
+	var desired: Vector3 = Vector3.ZERO
+	if distance > 0.04:
+		desired = to_target / distance * min(formation_speed, distance / max(delta, 0.0001))
+	velocity = velocity.lerp(desired, clamp(10.0 * delta, 0.0, 1.0))
 
 
 func _update_movement(_delta: float) -> void:

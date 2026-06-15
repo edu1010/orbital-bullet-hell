@@ -3,7 +3,7 @@ extends Node
 
 signal run_state_changed(state: int)
 
-enum RunState { MENU, PLAYING, PAUSED, GAME_OVER, TUTORIAL }
+enum RunState { MENU, PLAYING, PAUSED, GAME_OVER, TUTORIAL, REPLAY }
 
 # Central run coordinator: owns state, score, combo, high score, pooled objects,
 # and cross-system collision rules that are cheaper as distance checks.
@@ -71,6 +71,8 @@ var player: PlayerController
 var spawn_manager: SpawnManager
 var ui: GameUI
 var tutorial: TutorialController
+var boss: DragonBoss
+var replay: ReplayController
 var enemies_container: Node3D
 var projectiles_container: Node3D
 var shards_container: Node3D
@@ -99,11 +101,13 @@ var next_power_surge_score := 10000
 var power_surge_end_msec := 0
 var start_controls_hint_visible := false
 var score_magnets_collected := 0
-var enemy_warn_radius := 28.0
+var enemy_warn_radius := 46.0
 var warn_active := false
 var warn_position := Vector3.ZERO
 var warn_distance := 0.0
 var warn_is_bomb := false
+var boss_score_threshold := 40000
+var boss_started := false
 
 
 func configure(
@@ -129,8 +133,48 @@ func configure(
 	_update_ui()
 
 
+func can_replay() -> bool:
+	return replay != null and replay.has_replay()
+
+
+func start_replay() -> void:
+	if not can_replay():
+		return
+	Engine.time_scale = 1.0
+	power_surge_end_msec = 0
+	if boss:
+		boss.stop()
+	_deactivate_all()
+	if player:
+		player.visible = false
+	state = RunState.REPLAY
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	ui.show_state(state)
+	replay.start_playback()
+	run_state_changed.emit(state)
+
+
+func exit_replay() -> void:
+	if state != RunState.REPLAY:
+		return
+	if replay:
+		replay.stop_playback()
+	if player:
+		player.visible = true
+	return_to_main_menu()
+
+
+func add_boss_reward(amount: int) -> void:
+	_add_score(amount)
+	if player:
+		spawn_burst(player.global_position, Color(1.0, 0.85, 0.4), 6.0, 0.6)
+
+
 func show_main_menu() -> void:
 	Engine.time_scale = 1.0
+	if boss:
+		boss.stop()
+	boss_started = false
 	power_surge_end_msec = 0
 	start_controls_hint_visible = false
 	state = RunState.MENU
@@ -159,7 +203,12 @@ func start_run() -> void:
 	kill_rate_sample_timer = 0.0
 	recent_kill_rate = 0.0
 	score_magnets_collected = 0
+	boss_started = false
+	if boss:
+		boss.stop()
 	state = RunState.PLAYING
+	if replay:
+		replay.begin_recording()
 	player.reset_for_run(player.get_default_spawn_position())
 	spawn_manager.reset_for_run()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
@@ -204,6 +253,10 @@ func end_run() -> void:
 	if state == RunState.GAME_OVER:
 		return
 	Engine.time_scale = 1.0
+	if boss:
+		boss.stop()
+	if replay:
+		replay.stop_recording()
 	power_surge_end_msec = 0
 	start_controls_hint_visible = false
 	state = RunState.GAME_OVER
@@ -263,6 +316,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif tutorial and event.keycode == KEY_N:
 				tutorial.skip_stage()
 			return
+		if state == RunState.REPLAY:
+			if event.keycode == menu_key:
+				exit_replay()
+			return
 		if event.keycode == menu_key:
 			if (state == RunState.MENU or state == RunState.PAUSED) and ui and not ui.is_base_menu_screen():
 				ui.return_to_main_menu_screen()
@@ -286,6 +343,8 @@ func _process(delta: float) -> void:
 		else:
 			combo = max(1.0, combo - combo_decay_rate * delta)
 		_update_kill_rate(delta)
+		if replay:
+			replay.record(delta)
 	_update_heal_waves(delta)
 	_handle_player_enemy_contacts()
 	_update_ui()
@@ -570,6 +629,9 @@ func _add_score(amount: int) -> void:
 	if amount <= 0:
 		return
 	score += amount
+	if not boss_started and boss and state == RunState.PLAYING and score >= boss_score_threshold:
+		boss_started = true
+		boss.start()
 	var step: int = maxi(1, score_milestone_step)
 	if next_power_surge_score <= 0:
 		next_power_surge_score = step
@@ -715,6 +777,8 @@ func perform_extra_shot(origin: Vector3, direction: Vector3, beam_radius: float,
 		var magnet_radius: float = beam_radius + magnet.body_radius + (magnet_forward / beam_range) * beam_radius * 0.45
 		if magnet_distance <= magnet_radius:
 			magnet.on_extra_hit(direction)
+	if boss and boss.is_active():
+		boss.try_beam_hit(origin, direction, beam_radius, beam_range)
 	if player:
 		player.add_camera_shake(0.24, 0.18)
 	return killed
@@ -887,6 +951,9 @@ func _handle_player_enemy_contacts() -> void:
 	for enemy in active_enemies:
 		if not enemy.active:
 			continue
+		# Enemies woven into the dragon's body are inert; only the laser hurts you.
+		if enemy.formation_active:
+			continue
 		var distance: float = enemy.global_position.distance_to(player_hit_point)
 		if distance < nearest_distance and not player.is_enemy_platform_contact(enemy):
 			nearest_distance = distance
@@ -937,6 +1004,8 @@ func _update_ui() -> void:
 		"warn_distance": warn_distance,
 		"warn_is_bomb": warn_is_bomb,
 		"warn_radius": enemy_warn_radius,
+		"boss_active": boss != null and boss.is_active(),
+		"boss_health": boss.health_fraction() if boss else 0.0,
 	})
 
 

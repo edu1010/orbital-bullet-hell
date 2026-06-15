@@ -63,6 +63,9 @@ func _physics_process(delta: float) -> void:
 		else:
 			enemy.kill("primary", true)
 		deactivate()
+		return
+	if manager.boss and manager.boss.is_active() and manager.boss.try_hit(global_position, hit_radius):
+		deactivate()
 
 
 func _create_visual() -> void:

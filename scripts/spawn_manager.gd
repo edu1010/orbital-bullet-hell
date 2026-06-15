@@ -65,6 +65,9 @@ func _process(delta: float) -> void:
 	# The tutorial drives its own controlled spawns; automatic pressure stays off.
 	if manager.is_tutorial():
 		return
+	# During the dragon boss the boss owns the whole enemy population (its body).
+	if manager.boss and manager.boss.is_active():
+		return
 	bomb_timer -= delta
 	reflector_timer -= delta
 	_update_enemy_spawning(delta)

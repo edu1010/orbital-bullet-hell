@@ -6,6 +6,8 @@
 [ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="4_player"]
 [ext_resource type="PackedScene" path="res://scenes/ui/GameUI.tscn" id="5_ui"]
 [ext_resource type="Script" path="res://scripts/tutorial_controller.gd" id="6_tutorial"]
+[ext_resource type="Script" path="res://scripts/dragon_boss.gd" id="7_boss"]
+[ext_resource type="Script" path="res://scripts/replay.gd" id="8_replay"]
 
 [node name="Main" type="Node3D"]
 script = ExtResource("1_main")
@@ -32,6 +34,12 @@ script = ExtResource("3_spawn")
 
 [node name="Tutorial" type="Node" parent="."]
 script = ExtResource("6_tutorial")
+
+[node name="DragonBoss" type="Node3D" parent="."]
+script = ExtResource("7_boss")
+
+[node name="Replay" type="Node3D" parent="."]
+script = ExtResource("8_replay")
 
 [node name="Player" parent="." instance=ExtResource("4_player")]
 

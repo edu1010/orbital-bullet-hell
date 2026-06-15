@@ -21,6 +21,30 @@ Open this folder in Godot 4.x and run `res://scenes/Main.tscn` or press Play. Th
 
 Primary fire is automatic while a run is active.
 
+## Dragon boss
+
+Reaching 40,000 points summons a Chinese-dragon boss (`scripts/dragon_boss.gd`). Every
+active enemy is recruited into formation and flies into a serpentine line that snakes
+around the inside of the sphere — the dragon is literally made of the level's enemies,
+led by a head that opens its jaws to fire. Killing a body enemy still scores, and the
+boss tops the body back up, so the dragon stays whole.
+
+You win only by destroying the three exposed glowing red weak points (head crown gem,
+mid-body, tail), each ringed and drawn on top so the body never hides them. Each has a
+lot of health; a boss health bar tracks the total. Every 10–20 s the head locks onto the
+player and fires a tracking laser for 2–4 s, but it turns slower than the player runs, so
+it is dodgeable. Destroying all three weak points defeats the dragon for a score bonus.
+
+## Replay
+
+After a run ends, the game-over screen offers a **REPLAY** button (`scripts/replay.gd`).
+The last ~45 seconds are recorded into a ring buffer (player camera, nearby enemies,
+projectiles and the boss) and played back with lightweight ghost primitives. Replay
+controls: play/pause, a **1st/3rd-person** camera toggle, speed buttons
+(0.25x / 0.5x / 1x / 1.5x / 2x / 3x / 4x), a scrubbable timeline, and exit. The red
+threat marker around the crosshair now appears earlier (larger warn radius) and is drawn
+in red so a nearby enemy or an incoming hit reads sooner.
+
 ## Saving
 
 Progress and preferences persist between sessions via Godot `ConfigFile` saves in

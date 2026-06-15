@@ -13,6 +13,8 @@ extends Node3D
 @onready var game_manager: GameManager = $GameManager
 @onready var spawn_manager: SpawnManager = $SpawnManager
 @onready var tutorial: TutorialController = $Tutorial
+@onready var dragon_boss: DragonBoss = $DragonBoss
+@onready var replay: ReplayController = $Replay
 @onready var player: PlayerController = $Player
 @onready var ui: GameUI = $UI
 @onready var enemies_container: Node3D = $Pools/Enemies
@@ -40,6 +42,10 @@ func _ready() -> void:
 	spawn_manager.configure(game_manager, player)
 	tutorial.configure(game_manager, player, ui)
 	game_manager.tutorial = tutorial
+	dragon_boss.configure(game_manager, player)
+	game_manager.boss = dragon_boss
+	replay.configure(game_manager, player)
+	game_manager.replay = replay
 	player.configure(game_manager)
 	ui.configure(game_manager)
 	game_manager.show_main_menu()

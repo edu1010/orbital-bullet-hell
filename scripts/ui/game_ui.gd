@@ -33,6 +33,17 @@ var start_hint_stack: VBoxContainer
 var low_health_rect: ColorRect
 var flash_rect: ColorRect
 var ready_label: Label
+var boss_bar_root: Control
+var boss_bar_fill: ColorRect
+var boss_bar_label: Label
+var gameover_buttons: HBoxContainer
+var gameover_replay_button: Button
+var replay_panel: Control
+var replay_progress_holder: Control
+var replay_progress_fill: ColorRect
+var replay_pause_button: Button
+var replay_camera_button: Button
+var replay_speed_buttons: Array = []
 var audio_player: AudioStreamPlayer
 var flash_timer := 0.0
 var ready_timer := 0.0
@@ -146,6 +157,16 @@ const STRINGS := {
 	"tut_finished_title": {"en": "TUTORIAL COMPLETE!", "es": "¡TUTORIAL COMPLETADO!"},
 	"tut_finished_body": {"en": "You've mastered every element. Good hunting, pilot!", "es": "Ya dominas todos los elementos. ¡Buena caza, piloto!"},
 	"tut_hint": {"en": "[ESC] exit     ·     [N] skip step", "es": "[ESC] salir     ·     [N] saltar paso"},
+	"boss_incoming": {"en": "DRAGON INCOMING", "es": "¡DRAGÓN A LA VISTA!"},
+	"boss_defeated": {"en": "DRAGON DEFEATED", "es": "¡DRAGÓN DERROTADO!"},
+	"replay": {"en": "REPLAY", "es": "REPETICIÓN"},
+	"restart": {"en": "RESTART", "es": "REINTENTAR"},
+	"to_menu": {"en": "MENU", "es": "MENÚ"},
+	"replay_play": {"en": "PLAY", "es": "PLAY"},
+	"replay_pause": {"en": "PAUSE", "es": "PAUSA"},
+	"replay_first": {"en": "1ST PERSON", "es": "1ª PERSONA"},
+	"replay_third": {"en": "3RD PERSON", "es": "3ª PERSONA"},
+	"replay_exit": {"en": "EXIT", "es": "SALIR"},
 	"tut_move_title": {"en": "MOVEMENT", "es": "MOVIMIENTO"},
 	"tut_move_obj": {"en": "Move with [W][A][S][D] and look with the [MOUSE].", "es": "Muévete con [W][A][S][D] y mira con el [RATÓN]."},
 	"tut_jump_title": {"en": "JUMP", "es": "SALTO"},
@@ -287,6 +308,7 @@ func update_hud(data: Dictionary) -> void:
 		low_health_rect.color = Color(1.0, 0.0, 0.0, 0.0)
 	if radial_hud:
 		radial_hud.set_state(data)
+	set_boss_health(bool(data.get("boss_active", false)), float(data.get("boss_health", 0.0)))
 
 
 func show_state(state: int) -> void:
@@ -317,6 +339,12 @@ func show_state(state: int) -> void:
 			overlay_label.text = ""
 	if state != GameManager.RunState.TUTORIAL and tutorial_panel:
 		tutorial_panel.visible = false
+	if gameover_buttons:
+		gameover_buttons.visible = state == GameManager.RunState.GAME_OVER
+		if state == GameManager.RunState.GAME_OVER and gameover_replay_button:
+			gameover_replay_button.visible = manager != null and manager.can_replay()
+	if replay_panel and state != GameManager.RunState.REPLAY:
+		replay_panel.visible = false
 	start_hint_playing = state == GameManager.RunState.PLAYING or state == GameManager.RunState.TUTORIAL
 	_refresh_start_controls_hint()
 	_refresh_reticle()
@@ -408,6 +436,16 @@ func boost_feedback() -> void:
 	ready_label.text = t("cue_boost")
 
 
+func boss_alert(key: String) -> void:
+	ready_timer = 1.6
+	ready_label.modulate = Color(1.0, 0.45, 0.3, 1.0)
+	ready_label.text = t(key)
+	if damage_flash_enabled:
+		flash_color = Color(1.0, 0.3, 0.1, 1.0)
+		flash_timer = 0.5
+	_play_tone(196.0, 0.3)
+
+
 func power_surge_feedback() -> void:
 	if damage_flash_enabled:
 		flash_color = Color(0.35, 0.95, 1.0, 1.0)
@@ -471,6 +509,9 @@ func _build_ui() -> void:
 	_build_menu()
 	_build_start_controls_hint()
 	_build_tutorial_panel()
+	_build_boss_bar()
+	_build_gameover_buttons()
+	_build_replay_ui()
 
 	radial_hud = RadialHud.new()
 	radial_hud.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -1364,6 +1405,247 @@ func _build_tutorial_panel() -> void:
 	hint.add_theme_color_override("font_color", Color(0.6, 0.78, 0.9, 0.82))
 	stack.add_child(hint)
 	_loc(hint, "tut_hint")
+
+
+func _build_boss_bar() -> void:
+	boss_bar_root = Control.new()
+	boss_bar_root.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	boss_bar_root.z_index = 19
+	boss_bar_root.visible = false
+	boss_bar_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(boss_bar_root)
+
+	boss_bar_label = _make_label(20)
+	boss_bar_label.text = "- - -   DRAGON   - - -"
+	boss_bar_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	boss_bar_label.anchor_left = 0.5
+	boss_bar_label.anchor_right = 0.5
+	boss_bar_label.offset_left = -320.0
+	boss_bar_label.offset_right = 320.0
+	boss_bar_label.offset_top = 14.0
+	boss_bar_label.add_theme_color_override("font_color", Color(1.0, 0.55, 0.4))
+	boss_bar_root.add_child(boss_bar_label)
+
+	var frame := ColorRect.new()
+	frame.anchor_left = 0.5
+	frame.anchor_right = 0.5
+	frame.offset_left = -320.0
+	frame.offset_right = 320.0
+	frame.offset_top = 44.0
+	frame.offset_bottom = 66.0
+	frame.color = Color(0.06, 0.02, 0.03, 0.85)
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	boss_bar_root.add_child(frame)
+
+	boss_bar_fill = ColorRect.new()
+	boss_bar_fill.anchor_left = 0.0
+	boss_bar_fill.anchor_top = 0.0
+	boss_bar_fill.anchor_right = 1.0
+	boss_bar_fill.anchor_bottom = 1.0
+	boss_bar_fill.offset_left = 3.0
+	boss_bar_fill.offset_top = 3.0
+	boss_bar_fill.offset_bottom = -3.0
+	boss_bar_fill.offset_right = -3.0
+	boss_bar_fill.color = Color(0.95, 0.18, 0.14, 0.95)
+	boss_bar_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.add_child(boss_bar_fill)
+
+
+func _build_gameover_buttons() -> void:
+	gameover_buttons = HBoxContainer.new()
+	gameover_buttons.set_anchors_preset(Control.PRESET_CENTER)
+	gameover_buttons.offset_left = -330.0
+	gameover_buttons.offset_right = 330.0
+	gameover_buttons.offset_top = 120.0
+	gameover_buttons.offset_bottom = 190.0
+	gameover_buttons.alignment = BoxContainer.ALIGNMENT_CENTER
+	gameover_buttons.add_theme_constant_override("separation", 16)
+	gameover_buttons.z_index = 8
+	gameover_buttons.visible = false
+	overlay.add_child(gameover_buttons)
+
+	gameover_replay_button = _make_menu_button("", 28)
+	gameover_replay_button.custom_minimum_size = Vector2(220.0, 60.0)
+	gameover_replay_button.pressed.connect(Callable(self, "_on_replay_pressed"))
+	gameover_buttons.add_child(gameover_replay_button)
+	_loc(gameover_replay_button, "replay")
+
+	var restart_button := _make_menu_button("", 28)
+	restart_button.custom_minimum_size = Vector2(200.0, 60.0)
+	restart_button.pressed.connect(Callable(self, "_on_restart_pressed"))
+	gameover_buttons.add_child(restart_button)
+	_loc(restart_button, "restart")
+
+	var menu_button := _make_menu_button("", 28)
+	menu_button.custom_minimum_size = Vector2(200.0, 60.0)
+	menu_button.pressed.connect(Callable(self, "_on_main_menu_pressed"))
+	gameover_buttons.add_child(menu_button)
+	_loc(menu_button, "to_menu")
+
+
+func _on_replay_pressed() -> void:
+	if manager:
+		manager.start_replay()
+
+
+func _on_restart_pressed() -> void:
+	if manager:
+		manager.start_run()
+
+
+func _build_replay_ui() -> void:
+	replay_panel = Control.new()
+	replay_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	replay_panel.z_index = 31
+	replay_panel.visible = false
+	replay_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(replay_panel)
+
+	var title := _make_label(30)
+	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	title.position.y = 24.0
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_color_override("font_color", Color(0.85, 0.95, 1.0))
+	replay_panel.add_child(title)
+	_loc(title, "replay")
+
+	# Clickable progress / scrub bar.
+	replay_progress_holder = Control.new()
+	replay_progress_holder.anchor_left = 0.5
+	replay_progress_holder.anchor_right = 0.5
+	replay_progress_holder.anchor_top = 1.0
+	replay_progress_holder.anchor_bottom = 1.0
+	replay_progress_holder.offset_left = -490.0
+	replay_progress_holder.offset_right = 490.0
+	replay_progress_holder.offset_top = -96.0
+	replay_progress_holder.offset_bottom = -74.0
+	replay_progress_holder.mouse_filter = Control.MOUSE_FILTER_STOP
+	replay_progress_holder.gui_input.connect(Callable(self, "_on_replay_scrub"))
+	replay_panel.add_child(replay_progress_holder)
+	var bar_bg := ColorRect.new()
+	bar_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bar_bg.color = Color(0.08, 0.1, 0.16, 0.85)
+	bar_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	replay_progress_holder.add_child(bar_bg)
+	replay_progress_fill = ColorRect.new()
+	replay_progress_fill.anchor_top = 0.0
+	replay_progress_fill.anchor_bottom = 1.0
+	replay_progress_fill.offset_right = 0.0
+	replay_progress_fill.color = Color(0.45, 0.9, 1.0, 0.92)
+	replay_progress_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	replay_progress_holder.add_child(replay_progress_fill)
+
+	# Control row.
+	var controls := HBoxContainer.new()
+	controls.anchor_left = 0.5
+	controls.anchor_right = 0.5
+	controls.anchor_top = 1.0
+	controls.anchor_bottom = 1.0
+	controls.offset_left = -560.0
+	controls.offset_right = 560.0
+	controls.offset_top = -64.0
+	controls.offset_bottom = -16.0
+	controls.alignment = BoxContainer.ALIGNMENT_CENTER
+	controls.add_theme_constant_override("separation", 8)
+	replay_panel.add_child(controls)
+
+	replay_pause_button = _make_menu_button("", 22)
+	replay_pause_button.custom_minimum_size = Vector2(118.0, 48.0)
+	replay_pause_button.pressed.connect(Callable(self, "_on_replay_pause"))
+	controls.add_child(replay_pause_button)
+
+	replay_camera_button = _make_menu_button("", 22)
+	replay_camera_button.custom_minimum_size = Vector2(168.0, 48.0)
+	replay_camera_button.pressed.connect(Callable(self, "_on_replay_camera"))
+	controls.add_child(replay_camera_button)
+
+	replay_speed_buttons.clear()
+	var speeds: Array = manager.replay.get_speeds() if (manager and manager.replay) else [0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0]
+	for speed in speeds:
+		var button := _make_menu_button(_format_speed(speed), 22)
+		button.custom_minimum_size = Vector2(72.0, 48.0)
+		button.pressed.connect(Callable(self, "_on_replay_speed").bind(float(speed)))
+		controls.add_child(button)
+		replay_speed_buttons.append({"button": button, "speed": float(speed)})
+
+	var exit_button := _make_menu_button("", 22)
+	exit_button.custom_minimum_size = Vector2(118.0, 48.0)
+	exit_button.pressed.connect(Callable(self, "_on_replay_exit"))
+	controls.add_child(exit_button)
+	_loc(exit_button, "replay_exit")
+
+
+func _format_speed(speed: float) -> String:
+	if speed == floor(speed):
+		return "%dx" % int(speed)
+	return "%sx" % str(speed)
+
+
+func _on_replay_pause() -> void:
+	if manager and manager.replay:
+		manager.replay.toggle_pause()
+
+
+func _on_replay_camera() -> void:
+	if manager and manager.replay:
+		manager.replay.toggle_camera()
+
+
+func _on_replay_speed(speed: float) -> void:
+	if manager and manager.replay:
+		manager.replay.set_playback_speed(speed)
+
+
+func _on_replay_exit() -> void:
+	if manager:
+		manager.exit_replay()
+
+
+func _on_replay_scrub(event: InputEvent) -> void:
+	if not manager or not manager.replay or not replay_progress_holder:
+		return
+	var scrubbing := false
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		scrubbing = true
+	elif event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+		scrubbing = true
+	if not scrubbing:
+		return
+	var width: float = replay_progress_holder.size.x
+	if width <= 0.0:
+		return
+	manager.replay.scrub_to(clamp(event.position.x / width, 0.0, 1.0))
+
+
+func show_replay_controls(controls_visible: bool) -> void:
+	if replay_panel:
+		replay_panel.visible = controls_visible
+
+
+func update_replay_controls(speed: float, paused: bool, third_person: bool, progress: float) -> void:
+	if replay_pause_button:
+		replay_pause_button.text = t("replay_play") if paused else t("replay_pause")
+	if replay_camera_button:
+		replay_camera_button.text = t("replay_third") if third_person else t("replay_first")
+	for entry in replay_speed_buttons:
+		var button: Button = entry["button"]
+		var active: bool = abs(float(entry["speed"]) - speed) < 0.001
+		button.add_theme_color_override("font_color", Color(0.45, 1.0, 0.55) if active else Color(0.98, 0.99, 1.0))
+	update_replay_progress(progress)
+
+
+func update_replay_progress(fraction: float) -> void:
+	if replay_progress_fill and replay_progress_holder:
+		replay_progress_fill.offset_right = clamp(fraction, 0.0, 1.0) * replay_progress_holder.size.x
+
+
+func set_boss_health(bar_visible: bool, fraction: float) -> void:
+	if not boss_bar_root:
+		return
+	boss_bar_root.visible = bar_visible
+	if bar_visible and boss_bar_fill:
+		var full_width: float = 634.0
+		boss_bar_fill.offset_right = -3.0 - (1.0 - clamp(fraction, 0.0, 1.0)) * full_width
 
 
 func show_tutorial_panel(panel_visible: bool) -> void:
