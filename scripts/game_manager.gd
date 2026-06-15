@@ -968,7 +968,9 @@ func _handle_player_enemy_contacts() -> void:
 			continue
 		if distance <= enemy.body_radius:
 			if not safe:
-				player.apply_damage(player.max_hp, enemy.global_position)
+				# Touching a regular enemy chips one point (invuln frames space the hits)
+				# rather than being an instant kill, so the player can survive a few bumps.
+				player.apply_damage(1.0, enemy.global_position)
 				break
 	if nearest_enemy and nearest_distance <= enemy_warn_radius:
 		warn_active = true

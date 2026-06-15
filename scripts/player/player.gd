@@ -36,7 +36,7 @@ extends CharacterBody3D
 
 @export_group("Health")
 @export var max_hp := 3.0
-@export var invulnerability_time := 0.24
+@export var invulnerability_time := 1.5
 
 @export_group("Primary Fire")
 @export var primary_fire_rate := 12.5

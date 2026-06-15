@@ -14,18 +14,34 @@ extends Node3D
 @export var attack_head_speed := 3.5
 @export var dragon_altitude := 9.0
 @export var follow_bias := 0.16
-@export var aim_turn_rate := 0.34
+# How fast the beam can rotate while firing. Kept below the player's running
+# angular speed so a moving player can outrun the beam, while a still one gets hit.
+# While firing, the beam aims at a point on the ground that chases the player's
+# current ground position with a lag. Lower = more delay, so a moving player can
+# stay ahead of the sweeping beam. Used as a lerp rate (per second).
+@export var laser_follow_speed := 1.8
 @export var weak_point_hp := 55
 @export var weak_point_radius := 2.0
 @export var float_out := 1.6
 @export var laser_hit_radius := 1.8
 @export var laser_range := 120.0
+# The beam chips health instead of being an instant kill; apply_damage then grants
+# invulnerability frames so standing in it drains you over time rather than at once.
+@export var laser_damage := 2.0
+# Seconds for the lethal beam to grow from the mouth out to the ground/wall, so the
+# player sees it coming and can step out of the path.
+@export var beam_extend_time := 0.55
 @export var attack_interval_min := 10.0
 @export var attack_interval_max := 20.0
 @export var attack_windup := 0.9
 @export var attack_fire_min := 2.0
 @export var attack_fire_max := 4.0
 @export var defeat_score_bonus := 25000
+# Travelling ring "waves" along the beam, mirroring the player's extra shot.
+@export var ripple_interval := 0.07
+@export var ripple_spacing := 5.0
+@export var ripple_scroll_speed := 26.0
+@export var ripple_visible_range := 52.0
 
 var manager: GameManager
 var player: PlayerController
@@ -54,6 +70,10 @@ var attack_phase := "idle"
 var attack_time_left := 0.0
 var aim_dir := Vector3.FORWARD
 var topup_timer := 0.0
+var ripple_timer := 0.0
+var ripple_scroll := 0.0
+var beam_progress := 0.0
+var laser_target := Vector3.ZERO
 
 
 func configure(_manager: GameManager, _player: PlayerController) -> void:
@@ -109,6 +129,10 @@ func start() -> void:
 	attack_phase = "idle"
 	attack_timer = randf_range(attack_interval_min * 0.5, attack_interval_max * 0.5)
 	topup_timer = 0.0
+	ripple_timer = 0.0
+	ripple_scroll = 0.0
+	beam_progress = 0.0
+	laser_target = head_position
 	aim_dir = head_dir
 	laser_mesh.visible = false
 	active = true
@@ -224,7 +248,16 @@ func _update_head() -> void:
 	var facing: Vector3 = aim_dir if attack_phase != "idle" else head_dir
 	var look_target: Vector3 = head_position + facing
 	if look_target.distance_squared_to(head_position) > 0.001:
-		head_node.look_at(look_target, (head_position - sphere_center).normalized())
+		# Aiming at the player points roughly outward (along the radial), which would
+		# make a radial "up" colinear with the look direction and break look_at; project
+		# the radial onto the plane perpendicular to facing to keep a stable up vector.
+		var up_hint: Vector3 = (head_position - sphere_center).normalized()
+		up_hint = up_hint - facing * up_hint.dot(facing)
+		if up_hint.length_squared() <= 0.001:
+			up_hint = facing.cross(Vector3.RIGHT)
+			if up_hint.length_squared() <= 0.001:
+				up_hint = facing.cross(Vector3.UP)
+		head_node.look_at(look_target, up_hint.normalized())
 	if jaw_lower:
 		jaw_lower.rotation.x = mouth_open * 0.6
 	if jaw_upper:
@@ -269,18 +302,26 @@ func _update_attack(delta: float) -> void:
 			if attack_timer <= 0.0:
 				attack_phase = "windup"
 				attack_time_left = attack_windup
-				aim_dir = _direction_to_player()
+				# During wind-up the aim snaps to the player's ground spot to telegraph it.
+				laser_target = _player_ground_point()
+				aim_dir = _aim_to(laser_target)
 				laser_material.albedo_color = Color(1.0, 0.5, 0.2, 0.5)
 				laser_material.emission = Color(1.0, 0.4, 0.15)
 				laser_mesh.visible = true
 		"windup":
 			mouth_open = lerp(mouth_open, 1.0, clamp(5.0 * delta, 0.0, 1.0))
 			attack_time_left -= delta
-			aim_dir = _slerp_aim(aim_dir, _direction_to_player(), aim_turn_rate * 0.5 * delta)
-			_update_laser_visual(0.16)
+			laser_target = _player_ground_point()
+			aim_dir = _aim_to(laser_target)
+			# Thin aiming line all the way to the ground so the target path is telegraphed.
+			_update_laser_visual(0.16, _beam_length_to_wall())
 			if attack_time_left <= 0.0:
 				attack_phase = "fire"
 				attack_time_left = randf_range(attack_fire_min, attack_fire_max)
+				beam_progress = 0.0
+				# Lock the strike onto the ground where the player stands right now; the
+				# fire phase then drags this point after the player with a lag.
+				laser_target = _player_ground_point()
 				laser_material.albedo_color = Color(1.0, 0.12, 0.08, 0.95)
 				laser_material.emission = Color(1.0, 0.18, 0.12)
 				if manager:
@@ -288,35 +329,52 @@ func _update_attack(delta: float) -> void:
 		"fire":
 			mouth_open = 1.0
 			attack_time_left -= delta
-			aim_dir = _slerp_aim(aim_dir, _direction_to_player(), aim_turn_rate * delta)
-			_update_laser_visual(0.7)
-			_apply_laser_damage()
+			# Chase the player's current ground spot, but only a fraction per frame, so
+			# the impact point (and the head following it) trails behind the player.
+			var follow: float = clamp(laser_follow_speed * delta, 0.0, 1.0)
+			laser_target = laser_target.lerp(_player_ground_point(), follow)
+			laser_target = sphere_center + (laser_target - sphere_center).normalized() * sphere_radius
+			aim_dir = _aim_to(laser_target)
+			# The lethal beam grows from the mouth out to the ground over beam_extend_time,
+			# and only the part that has been reached can hurt the player.
+			beam_progress = min(1.0, beam_progress + delta / max(0.01, beam_extend_time))
+			var current_length: float = _beam_length_to_wall() * beam_progress
+			_update_laser_visual(0.7, current_length)
+			_emit_laser_ripples(delta, current_length)
+			_apply_laser_damage(current_length)
 			if attack_time_left <= 0.0:
 				attack_phase = "idle"
 				attack_timer = randf_range(attack_interval_min, attack_interval_max)
 				laser_mesh.visible = false
 
 
-func _direction_to_player() -> Vector3:
-	var to_player: Vector3 = player.global_position - _mouth_origin()
-	if to_player.length_squared() <= 0.001:
+func _player_ground_point() -> Vector3:
+	# The spot on the arena floor (sphere wall) directly under the player, which is
+	# what the beam scorches.
+	var radial: Vector3 = player.global_position - sphere_center
+	if radial.length_squared() <= 0.001:
+		return player.global_position
+	return sphere_center + radial.normalized() * sphere_radius
+
+
+func _aim_to(target: Vector3) -> Vector3:
+	var to_target: Vector3 = target - _mouth_origin()
+	if to_target.length_squared() <= 0.001:
 		return aim_dir
-	return to_player.normalized()
+	return to_target.normalized()
 
 
 func _mouth_origin() -> Vector3:
+	# Anchor to the gap between the jaws (front of the snout, slightly low) so the
+	# beam visibly leaves the open mouth rather than the centre of the skull.
+	if head_node:
+		return head_node.to_global(Vector3(0.0, -0.25, -2.7))
 	var facing: Vector3 = aim_dir if attack_phase != "idle" else head_dir
-	return head_position + facing * 1.6
+	return head_position + facing * 2.0
 
 
-func _slerp_aim(current: Vector3, target: Vector3, max_radians: float) -> Vector3:
-	var angle: float = current.angle_to(target)
-	if angle <= max_radians or angle <= 0.0001:
-		return target
-	return current.slerp(target, clamp(max_radians / angle, 0.0, 1.0)).normalized()
-
-
-func _update_laser_visual(width: float) -> void:
+func _update_laser_visual(width: float, length: float) -> void:
+	var beam_length: float = max(0.01, length)
 	var origin: Vector3 = _mouth_origin()
 	var y_axis: Vector3 = aim_dir
 	var x_axis: Vector3 = y_axis.cross(Vector3.UP)
@@ -324,21 +382,63 @@ func _update_laser_visual(width: float) -> void:
 		x_axis = y_axis.cross(Vector3.RIGHT)
 	x_axis = x_axis.normalized()
 	var z_axis: Vector3 = x_axis.cross(y_axis).normalized()
-	var basis := Basis(x_axis, y_axis, z_axis).scaled(Vector3(width, laser_range, width))
-	laser_mesh.global_transform = Transform3D(basis, origin + aim_dir * laser_range * 0.5)
+	var basis := Basis(x_axis, y_axis, z_axis).scaled(Vector3(width, beam_length, width))
+	laser_mesh.global_transform = Transform3D(basis, origin + aim_dir * beam_length * 0.5)
 
 
-func _apply_laser_damage() -> void:
+func _beam_length_to_wall() -> float:
+	# Distance from the mouth along the aim direction to where the beam exits the
+	# spherical arena (the ground the player stands on), capped at laser_range.
+	var origin: Vector3 = _mouth_origin()
+	var oc: Vector3 = origin - sphere_center
+	var b: float = 2.0 * oc.dot(aim_dir)
+	var c: float = oc.dot(oc) - sphere_radius * sphere_radius
+	var disc: float = b * b - 4.0 * c
+	if disc <= 0.0:
+		return laser_range
+	var t: float = (-b + sqrt(disc)) * 0.5
+	if t <= 0.0:
+		return laser_range
+	return min(laser_range, t)
+
+
+func _emit_laser_ripples(delta: float, max_distance: float) -> void:
+	# Pulse small expanding rings down the beam, scrolling outward so they read as
+	# waves travelling from the mouth toward the player (like the player's extra shot).
+	if not manager:
+		return
+	ripple_scroll = fmod(ripple_scroll + delta * ripple_scroll_speed, ripple_spacing)
+	ripple_timer -= delta
+	if ripple_timer > 0.0:
+		return
+	ripple_timer = ripple_interval
+	var origin: Vector3 = _mouth_origin()
+	var visible_range: float = min(min(laser_range, ripple_visible_range), max_distance)
+	if visible_range <= 1.0:
+		return
+	var ripple_color := Color(1.0, 0.4, 0.16, 0.9)
+	var dist: float = ripple_scroll + 1.0
+	while dist <= visible_range:
+		var t: float = dist / visible_range
+		var ring_position: Vector3 = origin + aim_dir * dist
+		var ring_end_radius: float = lerp(0.45, 1.5, t)
+		manager.spawn_laser_ring(ring_position, aim_dir, 0.12, ring_end_radius, ripple_color, lerp(0.16, 0.3, t))
+		dist += ripple_spacing
+
+
+func _apply_laser_damage(max_distance: float) -> void:
 	if not player or player.is_dead():
 		return
 	var origin: Vector3 = _mouth_origin()
 	var to_player: Vector3 = player.global_position - origin
 	var along: float = to_player.dot(aim_dir)
-	if along < 0.0 or along > laser_range:
+	# Only the stretch the beam has already extended over can hurt you, so the growing
+	# tip has to actually reach the player before it deals damage.
+	if along < 0.0 or along > max_distance:
 		return
 	var closest: Vector3 = origin + aim_dir * along
 	if player.global_position.distance_to(closest) <= laser_hit_radius + 0.6:
-		player.apply_damage(player.max_hp, origin)
+		player.apply_damage(laser_damage, origin)
 
 
 func try_hit(hit_position: Vector3, radius: float) -> bool:

@@ -32,6 +32,8 @@ var start_hint_panel: Control
 var start_hint_stack: VBoxContainer
 var low_health_rect: ColorRect
 var flash_rect: ColorRect
+var damage_vignette: ColorRect
+var vignette_material: ShaderMaterial
 var ready_label: Label
 var boss_bar_root: Control
 var boss_bar_fill: ColorRect
@@ -46,6 +48,8 @@ var replay_camera_button: Button
 var replay_speed_buttons: Array = []
 var audio_player: AudioStreamPlayer
 var flash_timer := 0.0
+var vignette_timer := 0.0
+var vignette_duration := 1.5
 var ready_timer := 0.0
 var start_hint_requested := false
 var start_hint_playing := false
@@ -270,6 +274,16 @@ func _process(delta: float) -> void:
 		flash_rect.color = Color(flash_color.r, flash_color.g, flash_color.b, alpha)
 	else:
 		flash_rect.color = Color(flash_color.r, flash_color.g, flash_color.b, 0.0)
+	if vignette_material:
+		var vignette_intensity := 0.0
+		if vignette_timer > 0.0:
+			vignette_timer -= delta
+			# Ease-out so the edges punch in instantly then linger and fade.
+			var t: float = clamp(vignette_timer / vignette_duration, 0.0, 1.0)
+			vignette_intensity = (1.0 - pow(1.0 - t, 2.0)) * 0.85 + t * 0.15
+			var pulse: float = 0.85 + sin(float(Time.get_ticks_msec()) / 90.0) * 0.15
+			vignette_intensity *= pulse
+		vignette_material.set_shader_parameter("intensity", vignette_intensity)
 	if ready_timer > 0.0:
 		ready_timer -= delta
 		ready_label.modulate.a = clamp(ready_timer / 0.35, 0.0, 1.0)
@@ -385,6 +399,7 @@ func damage_feedback(_amount: float) -> void:
 		return
 	flash_color = Color(1.0, 0.08, 0.06, 1.0)
 	flash_timer = 0.24
+	vignette_timer = vignette_duration
 
 
 func register_damage_direction(world_position: Vector3) -> void:
@@ -548,6 +563,31 @@ func _build_ui() -> void:
 	flash_rect.color = Color(1.0, 0.0, 0.0, 0.0)
 	flash_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(flash_rect)
+
+	# Red edge vignette pulsed on hit: transparent at the centre, glowing red toward
+	# the borders so taking damage reads at a glance without blocking the view.
+	damage_vignette = ColorRect.new()
+	damage_vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
+	damage_vignette.z_index = 14
+	damage_vignette.color = Color(1.0, 1.0, 1.0, 1.0)
+	damage_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var vignette_shader := Shader.new()
+	vignette_shader.code = """
+shader_type canvas_item;
+uniform float intensity : hint_range(0.0, 1.0) = 0.0;
+uniform vec4 edge_color : source_color = vec4(1.0, 0.05, 0.04, 1.0);
+void fragment() {
+	vec2 centered = UV - vec2(0.5);
+	float dist = length(centered) * 1.41421356;
+	float vignette = smoothstep(0.42, 0.95, dist);
+	COLOR = vec4(edge_color.rgb, edge_color.a * vignette * intensity);
+}
+"""
+	vignette_material = ShaderMaterial.new()
+	vignette_material.shader = vignette_shader
+	vignette_material.set_shader_parameter("intensity", 0.0)
+	damage_vignette.material = vignette_material
+	root.add_child(damage_vignette)
 
 	audio_player = AudioStreamPlayer.new()
 	add_child(audio_player)
