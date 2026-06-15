@@ -21,6 +21,15 @@ Open this folder in Godot 4.x and run `res://scenes/Main.tscn` or press Play. Th
 
 Primary fire is automatic while a run is active.
 
+## Tutorial
+
+The main menu has a `TUTORIAL` button (marked with a graduation-cap icon). It launches
+a guided, non-lethal sandbox with one short scene per game element — movement, jumping,
+primary fire, enemy-platform jumps, the extra shot, orbital shield, boost, each enemy type
+(charger, avoider, bomb), the heal reflector, and the score magnet. Each scene states an
+objective and only advances once the player actually performs that mechanic. `Esc` exits to
+the menu and `N` skips the current scene. See `scripts/tutorial_controller.gd`.
+
 Rare purple score magnets can drop from kills. Collecting one pulls all active score shards toward you.
 
 ## Structure

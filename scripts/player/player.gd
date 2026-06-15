@@ -104,6 +104,14 @@ var on_gravity_floor := false
 var orbital_shield_visual: MeshInstance3D
 var orbital_shield_material: StandardMaterial3D
 
+# Lightweight action counters consumed by the tutorial to detect mechanics.
+var stat_jumps := 0
+var stat_air_jumps := 0
+var stat_enemy_jumps := 0
+var stat_extra_shots := 0
+var stat_shield_shots := 0
+var stat_boosts := 0
+
 
 func configure(_manager: GameManager) -> void:
 	manager = _manager
@@ -147,6 +155,12 @@ func reset_for_run(start_position: Vector3) -> void:
 	ready_cue_played = false
 	orbital_shield_ready_cue_played = false
 	boost_ready_cue_played = false
+	stat_jumps = 0
+	stat_air_jumps = 0
+	stat_enemy_jumps = 0
+	stat_extra_shots = 0
+	stat_shield_shots = 0
+	stat_boosts = 0
 	if orbital_shield_visual:
 		orbital_shield_visual.visible = false
 	on_gravity_floor = true
@@ -261,8 +275,10 @@ func _do_jump(air_jump: bool) -> void:
 	var tangent_velocity: Vector3 = velocity.slide(gravity_down)
 	velocity = tangent_velocity - gravity_down * jump_force
 	jump_buffer_timer = 0.0
+	stat_jumps += 1
 	if air_jump:
 		jumps_remaining -= 1
+		stat_air_jumps += 1
 	coyote_timer = 0.0
 	current_platform_enemy = null
 	fov_kick = max(fov_kick, 4.0)
@@ -331,6 +347,7 @@ func try_fire_extra() -> void:
 	var direction: Vector3 = -camera.global_transform.basis.z.normalized()
 	manager.perform_extra_shot(camera.global_position, direction, extra_shot_radius, extra_shot_range)
 	_apply_downward_fire_lift(direction, extra_shot_lift_impulse)
+	stat_extra_shots += 1
 	extra_charge = 0.0
 	ready_cue_played = false
 	fov_kick = max(fov_kick, 12.0)
@@ -342,6 +359,7 @@ func try_fire_orbital_shield() -> void:
 		return
 	orbital_shield_charge = 0.0
 	orbital_shield_ready_cue_played = false
+	stat_shield_shots += 1
 	orbital_shield_timer = orbital_shield_duration
 	var tangent_velocity: Vector3 = velocity.slide(gravity_down) * 0.2
 	velocity = tangent_velocity - gravity_down * orbital_shield_launch_speed
@@ -373,6 +391,7 @@ func try_boost() -> void:
 	manager.dismiss_start_controls_hint()
 	boost_charge = 0.0
 	boost_ready_cue_played = false
+	stat_boosts += 1
 	boost_timer = boost_duration
 	var boost_direction: Vector3 = _current_intended_boost_direction()
 	velocity += boost_direction * boost_impulse
@@ -434,6 +453,7 @@ func add_kill_charge(source: String, current_combo: float) -> void:
 
 
 func _on_enemy_platform_jump() -> void:
+	stat_enemy_jumps += 1
 	add_orbital_shield_charge(orbital_shield_enemy_jump_charge)
 	if manager:
 		manager.spawn_burst(global_position, Color(0.62, 0.96, 1.0), 1.4, 0.16)

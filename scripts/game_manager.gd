@@ -3,7 +3,7 @@ extends Node
 
 signal run_state_changed(state: int)
 
-enum RunState { MENU, PLAYING, PAUSED, GAME_OVER }
+enum RunState { MENU, PLAYING, PAUSED, GAME_OVER, TUTORIAL }
 
 # Central run coordinator: owns state, score, combo, high score, pooled objects,
 # and cross-system collision rules that are cheaper as distance checks.
@@ -70,6 +70,7 @@ var survival_time := 0.0
 var player: PlayerController
 var spawn_manager: SpawnManager
 var ui: GameUI
+var tutorial: TutorialController
 var enemies_container: Node3D
 var projectiles_container: Node3D
 var shards_container: Node3D
@@ -97,6 +98,7 @@ var recent_kill_rate := 0.0
 var next_power_surge_score := 10000
 var power_surge_end_msec := 0
 var start_controls_hint_visible := false
+var score_magnets_collected := 0
 
 
 func configure(
@@ -151,6 +153,7 @@ func start_run() -> void:
 	kills_in_sample = 0
 	kill_rate_sample_timer = 0.0
 	recent_kill_rate = 0.0
+	score_magnets_collected = 0
 	state = RunState.PLAYING
 	player.reset_for_run(player.get_default_spawn_position())
 	spawn_manager.reset_for_run()
@@ -209,7 +212,27 @@ func end_run() -> void:
 
 
 func is_playing() -> bool:
-	return state == RunState.PLAYING
+	# Tutorial reuses the live simulation (player, enemies, pickups) so the
+	# moving parts that gate on is_playing() keep running while teaching.
+	return state == RunState.PLAYING or state == RunState.TUTORIAL
+
+
+func is_tutorial() -> bool:
+	return state == RunState.TUTORIAL
+
+
+func start_tutorial() -> void:
+	if tutorial:
+		tutorial.start_tutorial()
+
+
+func stop_tutorial() -> void:
+	if tutorial:
+		tutorial.stop_tutorial()
+
+
+func clear_active_field() -> void:
+	_deactivate_all()
 
 
 func dismiss_start_controls_hint() -> void:
@@ -229,6 +252,12 @@ func get_bound_key(action_name: String, fallback: int) -> int:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		var menu_key: int = get_bound_key("menu", KEY_ESCAPE)
+		if state == RunState.TUTORIAL:
+			if event.keycode == menu_key:
+				stop_tutorial()
+			elif tutorial and event.keycode == KEY_N:
+				tutorial.skip_stage()
+			return
 		if event.keycode == menu_key:
 			if (state == RunState.MENU or state == RunState.PAUSED) and ui and not ui.is_base_menu_screen():
 				ui.return_to_main_menu_screen()
@@ -245,12 +274,13 @@ func _process(delta: float) -> void:
 	_update_power_surge_state()
 	if not is_playing():
 		return
-	survival_time += delta
-	if combo_decay_timer > 0.0:
-		combo_decay_timer -= delta
-	else:
-		combo = max(1.0, combo - combo_decay_rate * delta)
-	_update_kill_rate(delta)
+	if not is_tutorial():
+		survival_time += delta
+		if combo_decay_timer > 0.0:
+			combo_decay_timer -= delta
+		else:
+			combo = max(1.0, combo - combo_decay_rate * delta)
+		_update_kill_rate(delta)
 	_update_heal_waves(delta)
 	_handle_player_enemy_contacts()
 	_update_ui()
@@ -524,6 +554,8 @@ func collect_shard(value: int) -> void:
 
 
 func attract_all_shards() -> void:
+	# Only score magnets call this, so it doubles as a "magnet collected" signal.
+	score_magnets_collected += 1
 	for shard in active_shards:
 		if shard.active:
 			shard.magnetize()
@@ -839,18 +871,24 @@ func _update_kill_rate(delta: float) -> void:
 func _handle_player_enemy_contacts() -> void:
 	if not player or player.is_dead():
 		return
+	# The tutorial is a safe sandbox: contact never kills, so a missed shot or a
+	# brushed enemy does not abort the lesson the player is practicing.
+	var safe: bool = is_tutorial()
 	var player_hit_point: Vector3 = player.global_position
 	for enemy in active_enemies:
 		if not enemy.active:
 			continue
 		if enemy is BombEnemy:
 			if enemy.global_position.distance_to(player_hit_point) <= (enemy as BombEnemy).contact_radius:
-				player.apply_damage(player.max_hp, enemy.global_position)
+				if not safe:
+					player.apply_damage(player.max_hp, enemy.global_position)
 				detonate_bomb(enemy as BombEnemy, "touch")
 			continue
 		if player.is_enemy_platform_contact(enemy):
 			continue
 		if enemy.global_position.distance_to(player_hit_point) <= enemy.body_radius:
+			if safe:
+				continue
 			player.apply_damage(player.max_hp, enemy.global_position)
 			break
 

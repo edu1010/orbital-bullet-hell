@@ -27,6 +27,13 @@ var leaderboard_rows: VBoxContainer
 var settings_panel: Control
 var settings_rows: VBoxContainer
 var reticle_dot: ColorRect
+var tutorial_button_icon: Control
+var tutorial_button_label: Label
+var tutorial_panel: Control
+var tutorial_step_label: Label
+var tutorial_title_label: Label
+var tutorial_objective_label: Label
+var tutorial_status_label: Label
 var start_hint_panel: Control
 var low_health_rect: ColorRect
 var flash_rect: ColorRect
@@ -176,7 +183,9 @@ func show_state(state: int) -> void:
 			overlay_label.visible = false
 			_hide_menu()
 			overlay_label.text = ""
-	start_hint_playing = state == GameManager.RunState.PLAYING
+	if state != GameManager.RunState.TUTORIAL and tutorial_panel:
+		tutorial_panel.visible = false
+	start_hint_playing = state == GameManager.RunState.PLAYING or state == GameManager.RunState.TUTORIAL
 	_refresh_start_controls_hint()
 	_refresh_reticle()
 
@@ -351,6 +360,7 @@ func _build_ui() -> void:
 
 	_build_menu()
 	_build_start_controls_hint()
+	_build_tutorial_panel()
 
 	reticle_dot = ColorRect.new()
 	reticle_dot.anchor_left = 0.5
@@ -421,6 +431,7 @@ func _build_main_menu() -> void:
 	menu_root.add_child(main_menu_panel)
 
 	_add_main_menu_button("PLAY", "_on_play_pressed")
+	_add_main_menu_tutorial_button()
 	_add_main_menu_button("RANKING", "_on_ranking_pressed")
 	_add_main_menu_button("SETTINGS", "_on_settings_pressed")
 	_add_main_menu_button("QUIT", "_on_quit_pressed")
@@ -546,6 +557,72 @@ func _add_main_menu_button(text: String, callback: String) -> void:
 	main_menu_panel.add_child(button)
 
 
+func _add_main_menu_tutorial_button() -> void:
+	# A distinct main-menu entry marked with a generated graduation-cap symbol.
+	var button := _make_menu_button("", 26)
+	button.custom_minimum_size = Vector2(180.0, 92.0)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.pressed.connect(Callable(self, "_on_tutorial_pressed"))
+	main_menu_panel.add_child(button)
+
+	var content := VBoxContainer.new()
+	content.set_anchors_preset(Control.PRESET_FULL_RECT)
+	content.alignment = BoxContainer.ALIGNMENT_CENTER
+	content.add_theme_constant_override("separation", 3)
+	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	button.add_child(content)
+
+	tutorial_button_icon = _make_grad_cap_icon()
+	tutorial_button_icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	content.add_child(tutorial_button_icon)
+
+	tutorial_button_label = _make_label(24)
+	tutorial_button_label.text = "TUTORIAL"
+	tutorial_button_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tutorial_button_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tutorial_button_label.add_theme_color_override("font_color", Color(0.98, 0.99, 1.0))
+	tutorial_button_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(tutorial_button_label)
+
+	# Keep the icon and label readable against the light hover background.
+	button.mouse_entered.connect(Callable(self, "_on_tutorial_button_hover").bind(true))
+	button.mouse_exited.connect(Callable(self, "_on_tutorial_button_hover").bind(false))
+
+
+func _on_tutorial_button_hover(hovered: bool) -> void:
+	var color: Color = Color(0.12, 0.22, 0.3) if hovered else Color(0.98, 0.99, 1.0)
+	if tutorial_button_label:
+		tutorial_button_label.add_theme_color_override("font_color", color)
+	if tutorial_button_icon:
+		tutorial_button_icon.modulate = color if hovered else Color(1.0, 1.0, 1.0)
+
+
+func _make_grad_cap_icon() -> Control:
+	var holder := Control.new()
+	holder.custom_minimum_size = Vector2(44.0, 30.0)
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var cap_color := Color(0.45, 0.95, 1.0)
+	var base_color := Color(0.26, 0.68, 0.94)
+	var tassel_color := Color(0.94, 1.0, 0.72)
+	var base := Polygon2D.new()
+	base.polygon = PackedVector2Array([Vector2(13.0, 13.0), Vector2(31.0, 13.0), Vector2(28.0, 25.0), Vector2(16.0, 25.0)])
+	base.color = base_color
+	holder.add_child(base)
+	var board := Polygon2D.new()
+	board.polygon = PackedVector2Array([Vector2(22.0, 3.0), Vector2(40.0, 12.0), Vector2(22.0, 21.0), Vector2(4.0, 12.0)])
+	board.color = cap_color
+	holder.add_child(board)
+	var tassel_string := Polygon2D.new()
+	tassel_string.polygon = PackedVector2Array([Vector2(33.0, 12.0), Vector2(35.0, 12.0), Vector2(35.0, 25.0), Vector2(33.0, 25.0)])
+	tassel_string.color = tassel_color
+	holder.add_child(tassel_string)
+	var knob := Polygon2D.new()
+	knob.polygon = PackedVector2Array([Vector2(31.0, 24.0), Vector2(37.0, 24.0), Vector2(37.0, 29.0), Vector2(31.0, 29.0)])
+	knob.color = tassel_color
+	holder.add_child(knob)
+	return holder
+
+
 func _add_pause_menu_button(text: String, callback: String) -> void:
 	var button := _make_menu_button(text, 34)
 	button.custom_minimum_size = Vector2(420.0, 74.0)
@@ -592,6 +669,11 @@ func _hide_menu() -> void:
 func _on_play_pressed() -> void:
 	if manager:
 		manager.start_run()
+
+
+func _on_tutorial_pressed() -> void:
+	if manager:
+		manager.start_tutorial()
 
 
 func _on_resume_pressed() -> void:
@@ -891,7 +973,8 @@ func _set_setting_value(setting_name: String, text: String) -> void:
 
 func _refresh_reticle() -> void:
 	if reticle_dot:
-		reticle_dot.visible = reticle_enabled and current_ui_state == GameManager.RunState.PLAYING
+		var in_action: bool = current_ui_state == GameManager.RunState.PLAYING or current_ui_state == GameManager.RunState.TUTORIAL
+		reticle_dot.visible = reticle_enabled and in_action
 
 
 func _make_menu_button(text: String, font_size := 28) -> Button:
@@ -1031,6 +1114,95 @@ func _refresh_start_controls_hint() -> void:
 		hud.visible = start_hint_playing and not show_hint
 	if not start_hint_panel.visible:
 		start_hint_panel.modulate.a = 0.0
+
+
+func _build_tutorial_panel() -> void:
+	tutorial_panel = Control.new()
+	tutorial_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	tutorial_panel.z_index = 19
+	tutorial_panel.visible = false
+	tutorial_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(tutorial_panel)
+
+	var backdrop := PanelContainer.new()
+	backdrop.anchor_left = 0.5
+	backdrop.anchor_right = 0.5
+	backdrop.offset_left = -440.0
+	backdrop.offset_right = 440.0
+	backdrop.offset_top = 80.0
+	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	backdrop.add_theme_stylebox_override("panel", _make_flat_style(Color(0.05, 0.07, 0.12, 0.86), Color(0.45, 0.92, 1.0, 0.5), 2))
+	tutorial_panel.add_child(backdrop)
+
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 6)
+	stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	backdrop.add_child(stack)
+
+	tutorial_step_label = _make_label(18)
+	tutorial_step_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tutorial_step_label.add_theme_color_override("font_color", Color(0.5, 0.92, 1.0))
+	stack.add_child(tutorial_step_label)
+
+	tutorial_title_label = _make_label(34)
+	tutorial_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tutorial_title_label.add_theme_color_override("font_color", Color(0.9, 0.98, 1.0))
+	stack.add_child(tutorial_title_label)
+
+	tutorial_objective_label = _make_label(20)
+	tutorial_objective_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tutorial_objective_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tutorial_objective_label.custom_minimum_size = Vector2(840.0, 48.0)
+	stack.add_child(tutorial_objective_label)
+
+	tutorial_status_label = _make_label(24)
+	tutorial_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	stack.add_child(tutorial_status_label)
+
+	var hint := _make_label(15)
+	hint.text = "[ESC] salir     ·     [N] saltar paso"
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.add_theme_color_override("font_color", Color(0.6, 0.78, 0.9, 0.82))
+	stack.add_child(hint)
+
+
+func show_tutorial_panel(panel_visible: bool) -> void:
+	if tutorial_panel:
+		tutorial_panel.visible = panel_visible
+
+
+func set_tutorial_stage(index: int, total: int, title: String, objective: String) -> void:
+	if not tutorial_panel:
+		return
+	tutorial_panel.visible = true
+	tutorial_step_label.text = "PASO %d / %d" % [index, total]
+	tutorial_title_label.text = title
+	tutorial_objective_label.text = objective
+	tutorial_status_label.text = "> OBJETIVO <"
+	tutorial_status_label.add_theme_color_override("font_color", Color(0.55, 0.95, 1.0))
+
+
+func tutorial_stage_complete() -> void:
+	if tutorial_status_label:
+		tutorial_status_label.text = "¡COMPLETADO!"
+		tutorial_status_label.add_theme_color_override("font_color", Color(0.45, 1.0, 0.55))
+	ready_timer = 0.95
+	ready_label.modulate = Color(0.45, 1.0, 0.55, 1.0)
+	ready_label.text = "¡COMPLETADO!"
+	_play_tone(990.0, 0.12)
+
+
+func tutorial_finished() -> void:
+	if not tutorial_panel:
+		return
+	tutorial_step_label.text = ""
+	tutorial_title_label.text = "¡TUTORIAL COMPLETADO!"
+	tutorial_objective_label.text = "Ya dominas todos los elementos. ¡Buena caza, piloto!"
+	tutorial_status_label.text = ""
+	ready_timer = 1.6
+	ready_label.modulate = Color(0.65, 1.0, 0.95, 1.0)
+	ready_label.text = "¡COMPLETADO!"
+	_play_tone(1320.0, 0.18)
 
 
 func _make_label(size := 18) -> Label:

@@ -62,6 +62,9 @@ func reset_for_run() -> void:
 func _process(delta: float) -> void:
 	if not manager or not manager.is_playing():
 		return
+	# The tutorial drives its own controlled spawns; automatic pressure stays off.
+	if manager.is_tutorial():
+		return
 	bomb_timer -= delta
 	reflector_timer -= delta
 	_update_enemy_spawning(delta)
