@@ -6,13 +6,6 @@ var root: Control
 var hud: VBoxContainer
 var score_label: Label
 var high_score_label: Label
-var hp_label: Label
-var charge_label: Label
-var charge_bar: ProgressBar
-var shield_label: Label
-var shield_bar: ProgressBar
-var boost_label: Label
-var boost_bar: ProgressBar
 var combo_label: Label
 var time_label: Label
 var enemy_label: Label
@@ -27,6 +20,7 @@ var leaderboard_rows: VBoxContainer
 var settings_panel: Control
 var settings_rows: VBoxContainer
 var reticle_dot: ColorRect
+var radial_hud: RadialHud
 var tutorial_button_icon: Control
 var tutorial_button_label: Label
 var tutorial_panel: Control
@@ -35,6 +29,7 @@ var tutorial_title_label: Label
 var tutorial_objective_label: Label
 var tutorial_status_label: Label
 var start_hint_panel: Control
+var start_hint_stack: VBoxContainer
 var low_health_rect: ColorRect
 var flash_rect: ColorRect
 var ready_label: Label
@@ -72,11 +67,173 @@ var setting_fov := 86.0
 var setting_sensitivity := 0.0022
 var setting_effects_volume := 1.0
 var flash_color: Color = Color(1.0, 0.08, 0.06, 0.0)
+var language := "en"
+var languages: Array[String] = ["en", "es"]
+var localized_controls: Array = []
+
+const STRINGS := {
+	"play": {"en": "PLAY", "es": "JUGAR"},
+	"tutorial": {"en": "TUTORIAL", "es": "TUTORIAL"},
+	"ranking": {"en": "RANKING", "es": "CLASIFICACIÓN"},
+	"settings": {"en": "SETTINGS", "es": "AJUSTES"},
+	"quit": {"en": "QUIT", "es": "SALIR"},
+	"resume": {"en": "RESUME", "es": "REANUDAR"},
+	"main_menu": {"en": "MAIN MENU", "es": "MENÚ PRINCIPAL"},
+	"paused": {"en": "PAUSED", "es": "PAUSA"},
+	"back": {"en": "BACK", "es": "ATRÁS"},
+	"reset": {"en": "RESET", "es": "REINICIAR"},
+	"refresh": {"en": "REFRESH", "es": "ACTUALIZAR"},
+	"local_board": {"en": "LOCAL BOARD", "es": "TABLA LOCAL"},
+	"col_rank": {"en": "RANK", "es": "PUESTO"},
+	"col_pilot": {"en": "PILOT", "es": "PILOTO"},
+	"col_score": {"en": "SCORE", "es": "PUNTOS"},
+	"tab_video": {"en": "VIDEO", "es": "VÍDEO"},
+	"tab_hud": {"en": "HUD", "es": "HUD"},
+	"tab_keys": {"en": "KEYS", "es": "TECLAS"},
+	"tab_pad": {"en": "PAD", "es": "MANDO"},
+	"set_resolution": {"en": "RESOLUTION", "es": "RESOLUCIÓN"},
+	"set_fullscreen": {"en": "FULLSCREEN", "es": "PANTALLA COMPLETA"},
+	"set_fps": {"en": "FPS LIMIT", "es": "LÍMITE FPS"},
+	"set_fov": {"en": "FIELD OF VIEW", "es": "CAMPO DE VISIÓN"},
+	"set_sensitivity": {"en": "SENSITIVITY", "es": "SENSIBILIDAD"},
+	"set_volume": {"en": "EFFECTS VOLUME", "es": "VOLUMEN EFECTOS"},
+	"set_reticle": {"en": "RETICLE", "es": "RETÍCULA"},
+	"set_start_hint": {"en": "START HINT", "es": "AYUDA INICIAL"},
+	"set_low_health": {"en": "LOW HEALTH FILTER", "es": "FILTRO VIDA BAJA"},
+	"set_flashes": {"en": "FLASHES", "es": "DESTELLOS"},
+	"set_language": {"en": "LANGUAGE", "es": "IDIOMA"},
+	"key_forward": {"en": "FORWARD", "es": "ADELANTE"},
+	"key_backward": {"en": "BACKWARD", "es": "ATRÁS"},
+	"key_left": {"en": "LEFT", "es": "IZQUIERDA"},
+	"key_right": {"en": "RIGHT", "es": "DERECHA"},
+	"key_extra": {"en": "EXTRA SHOT", "es": "DISPARO EXTRA"},
+	"key_shield": {"en": "SHIELD", "es": "ESCUDO"},
+	"key_jump": {"en": "JUMP / ENEMY JUMP", "es": "SALTO / SALTO ENEMIGO"},
+	"key_boost": {"en": "BOOST", "es": "IMPULSO"},
+	"key_menu": {"en": "MENU", "es": "MENÚ"},
+	"pad_move": {"en": "MOVE", "es": "MOVER"},
+	"pad_look": {"en": "LOOK", "es": "MIRAR"},
+	"pad_shoot": {"en": "SHOOT", "es": "DISPARAR"},
+	"pad_jump": {"en": "JUMP", "es": "SALTAR"},
+	"pad_boost": {"en": "BOOST", "es": "IMPULSO"},
+	"pad_menu": {"en": "MENU", "es": "MENÚ"},
+	"press_key": {"en": "PRESS KEY...", "es": "PULSA TECLA..."},
+	"lang_value": {"en": "ENGLISH", "es": "ESPAÑOL"},
+	"hud_score": {"en": "Score", "es": "Puntos"},
+	"hud_high": {"en": "High", "es": "Récord"},
+	"hud_combo": {"en": "Combo", "es": "Combo"},
+	"hud_time": {"en": "Time", "es": "Tiempo"},
+	"hud_enemies": {"en": "Enemies", "es": "Enemigos"},
+	"ready_extra": {"en": "EXTRA READY", "es": "EXTRA LISTO"},
+	"ready_boost": {"en": "BOOST READY", "es": "IMPULSO LISTO"},
+	"ready_shield": {"en": "SHIELD READY", "es": "ESCUDO LISTO"},
+	"cue_shield": {"en": "SHIELD", "es": "ESCUDO"},
+	"cue_boost": {"en": "BOOST", "es": "IMPULSO"},
+	"cue_heal": {"en": "HEAL", "es": "CURA"},
+	"cue_power_surge": {"en": "POWER SURGE", "es": "SOBRECARGA"},
+	"hint_look": {"en": "LOOK", "es": "MIRAR"},
+	"hint_move": {"en": "MOVE", "es": "MOVER"},
+	"hint_boost": {"en": "BOOST", "es": "IMPULSO"},
+	"hint_extra": {"en": "EXTRA SHOT", "es": "DISPARO EXTRA"},
+	"hint_shield": {"en": "SHIELD", "es": "ESCUDO"},
+	"hint_jump": {"en": "JUMP", "es": "SALTAR"},
+	"hint_enemy_jump": {"en": "ENEMY JUMP", "es": "SALTO ENEMIGO"},
+	"gameover_title": {"en": "RUN ENDED", "es": "FIN DE PARTIDA"},
+	"gameover_restart": {"en": "R to restart", "es": "R para reiniciar"},
+	"tut_step": {"en": "STEP", "es": "PASO"},
+	"tut_objective": {"en": "> OBJECTIVE <", "es": "> OBJETIVO <"},
+	"tut_complete": {"en": "DONE!", "es": "¡COMPLETADO!"},
+	"tut_finished_title": {"en": "TUTORIAL COMPLETE!", "es": "¡TUTORIAL COMPLETADO!"},
+	"tut_finished_body": {"en": "You've mastered every element. Good hunting, pilot!", "es": "Ya dominas todos los elementos. ¡Buena caza, piloto!"},
+	"tut_hint": {"en": "[ESC] exit     ·     [N] skip step", "es": "[ESC] salir     ·     [N] saltar paso"},
+	"tut_move_title": {"en": "MOVEMENT", "es": "MOVIMIENTO"},
+	"tut_move_obj": {"en": "Move with [W][A][S][D] and look with the [MOUSE].", "es": "Muévete con [W][A][S][D] y mira con el [RATÓN]."},
+	"tut_jump_title": {"en": "JUMP", "es": "SALTO"},
+	"tut_jump_obj": {"en": "Press [SPACE] to jump. Press again in the air for a double jump.", "es": "Pulsa [ESPACIO] para saltar. Púlsalo de nuevo en el aire para el doble salto."},
+	"tut_shoot_title": {"en": "PRIMARY FIRE", "es": "DISPARO PRIMARIO"},
+	"tut_shoot_obj": {"en": "Your weapon fires on its own. Aim at the enemy and destroy it.", "es": "Tu arma dispara sola. Apunta al enemigo y destrúyelo."},
+	"tut_enemy_jump_title": {"en": "ENEMY-PLATFORM JUMP", "es": "SALTO SOBRE ENEMIGO"},
+	"tut_enemy_jump_obj": {"en": "Land on top of the enemy and bounce with [SPACE] to recharge the shield.", "es": "Sube encima del enemigo y rebota con [ESPACIO] para recargar el escudo."},
+	"tut_extra_title": {"en": "EXTRA SHOT", "es": "DISPARO EXTRA"},
+	"tut_extra_obj": {"en": "Charge ready. Press [LMB] to launch the beam and sweep the enemies.", "es": "Carga lista. Pulsa [CLIC IZQ] para lanzar el rayo y barrer a los enemigos."},
+	"tut_shield_title": {"en": "ORBITAL SHIELD", "es": "ESCUDO ORBITAL"},
+	"tut_shield_obj": {"en": "Charge ready. Press [RMB] to launch the shield and lift off.", "es": "Carga lista. Pulsa [CLIC DER] para lanzar el escudo y elevarte."},
+	"tut_boost_title": {"en": "BOOST", "es": "IMPULSO"},
+	"tut_boost_obj": {"en": "Charge ready. Press [SHIFT] to dash at high speed.", "es": "Carga lista. Pulsa [SHIFT] para impulsarte a gran velocidad."},
+	"tut_charger_title": {"en": "ENEMY: CHARGER", "es": "ENEMIGO: CARGADOR"},
+	"tut_charger_obj": {"en": "Destroy the Charger. It weaves to reach you: track it with your aim.", "es": "Destruye al Cargador. Zigzaguea para alcanzarte: síguelo con la mira."},
+	"tut_avoider_title": {"en": "ENEMY: AVOIDER", "es": "ENEMIGO: ESQUIVADOR"},
+	"tut_avoider_obj": {"en": "Destroy the Avoider. It dodges your bullets, close in and corner it!", "es": "Destruye al Esquivador. Esquiva tus balas, ¡acércate y acorrálalo!"},
+	"tut_bomb_title": {"en": "BOMB", "es": "BOMBA"},
+	"tut_bomb_obj": {"en": "Detonate the Bomb by shooting it from afar. Never touch it in a real run!", "es": "Detona la Bomba disparándole desde lejos. ¡Jamás la toques en una partida real!"},
+	"tut_reflector_title": {"en": "HEAL REFLECTOR", "es": "REFLECTOR DE CURA"},
+	"tut_reflector_obj": {"en": "Shoot the Reflector to draw it in: it heals you and fires healing rays.", "es": "Dispárale al Reflector para atraerlo: te curará y lanzará rayos sanadores."},
+	"tut_magnet_title": {"en": "SCORE MAGNET", "es": "IMÁN DE PUNTOS"},
+	"tut_magnet_obj": {"en": "Collect the Magnet to pull every score shard toward you.", "es": "Recoge el Imán para atraer hacia ti todos los fragmentos de puntos."},
+}
+
+
+func t(key: String) -> String:
+	var entry: Dictionary = STRINGS.get(key, {})
+	if entry.is_empty():
+		return key
+	return str(entry.get(language, entry.get("en", key)))
+
+
+func _loc(control: Control, key: String) -> void:
+	# Register a control so its text refreshes when the language changes.
+	localized_controls.append({"control": control, "key": key})
+	if control is Button:
+		(control as Button).text = t(key)
+	elif control is Label:
+		(control as Label).text = t(key)
+
+
+func set_language(new_language: String) -> void:
+	if not languages.has(new_language) or new_language == language:
+		return
+	language = new_language
+	_apply_language()
+	_save_settings()
+
+
+func _apply_language() -> void:
+	for entry in localized_controls:
+		var control: Control = entry["control"]
+		if not is_instance_valid(control):
+			continue
+		if control is Button:
+			(control as Button).text = t(entry["key"])
+		elif control is Label:
+			(control as Label).text = t(entry["key"])
+	_refresh_menu_title()
+	_rebuild_start_controls_hint()
+	if settings_panel and settings_panel.visible:
+		_show_settings_tab(settings_tab)
+	if leaderboard_panel and leaderboard_panel.visible:
+		_populate_leaderboard()
+
+
+func _refresh_menu_title() -> void:
+	if not menu_title:
+		return
+	match active_menu_screen:
+		"pause":
+			menu_title.text = t("paused")
+		"leaderboard":
+			menu_title.text = t("ranking")
+		"settings":
+			menu_title.text = t("settings")
+		_:
+			menu_title.text = "ORBITAL SWARM"
 
 
 func configure(_manager: GameManager) -> void:
 	manager = _manager
+	if radial_hud and manager and manager.player:
+		radial_hud.configure(manager.player)
 	_sync_settings_from_manager()
+	_load_settings()
 	_apply_settings()
 	_update_settings_labels()
 
@@ -109,52 +266,27 @@ func _input(event: InputEvent) -> void:
 		var key_event: InputEventKey = event as InputEventKey
 		key_bindings[rebinding_action] = key_event.keycode
 		rebinding_action = ""
+		_save_settings()
 		_show_settings_tab("keys")
 		get_viewport().set_input_as_handled()
 
 
 func update_hud(data: Dictionary) -> void:
-	score_label.text = "Score: %d" % data.get("score", 0)
-	high_score_label.text = "High: %d" % data.get("high_score", 0)
+	score_label.text = "%s: %d" % [t("hud_score"), data.get("score", 0)]
+	high_score_label.text = "%s: %d" % [t("hud_high"), data.get("high_score", 0)]
+	combo_label.text = "%s: x%.2f" % [t("hud_combo"), float(data.get("combo", 1.0))]
+	time_label.text = "%s: %s" % [t("hud_time"), _format_time(float(data.get("time", 0.0)))]
+	enemy_label.text = "%s: %d" % [t("hud_enemies"), data.get("enemies", 0)]
 	var hp_value: float = float(data.get("hp", 3.0))
 	var hp_max: float = float(data.get("max_hp", 3.0))
-	hp_label.text = "HP: %.1f / %.0f" % [hp_value, hp_max]
 	var low_health: bool = low_health_filter_enabled and hp_value > 0.0 and hp_value <= hp_max * 0.34
 	if low_health:
 		var pulse: float = (sin(float(Time.get_ticks_msec()) / 145.0) + 1.0) * 0.5
 		low_health_rect.color = Color(1.0, 0.03, 0.015, 0.12 + pulse * 0.12)
 	else:
 		low_health_rect.color = Color(1.0, 0.0, 0.0, 0.0)
-	if data.get("invulnerable", false):
-		hp_label.modulate = Color(1.0, 0.3, 0.25) if int(Time.get_ticks_msec() / 90) % 2 == 0 else Color(1.0, 1.0, 1.0)
-	else:
-		hp_label.modulate = Color(1.0, 1.0, 1.0)
-	var charge: float = float(data.get("charge", 0.0))
-	var charge_max: float = float(data.get("charge_max", 100.0))
-	charge_bar.max_value = charge_max
-	charge_bar.value = charge
-	charge_label.text = "Extra: %03d%%" % int(round(charge / charge_max * 100.0))
-	var shield: float = float(data.get("shield", 0.0))
-	var shield_max: float = float(data.get("shield_max", 100.0))
-	shield_bar.max_value = shield_max
-	shield_bar.value = shield
-	shield_label.text = "Shield: %03d%%" % int(round(shield / shield_max * 100.0))
-	if data.get("shield_active", false):
-		shield_label.modulate = Color(0.35, 0.95, 1.0)
-	else:
-		shield_label.modulate = Color(1.0, 1.0, 1.0)
-	var boost: float = float(data.get("boost", 0.0))
-	var boost_max: float = float(data.get("boost_max", 100.0))
-	boost_bar.max_value = boost_max
-	boost_bar.value = boost
-	boost_label.text = "Boost: %03d%%" % int(round(boost / boost_max * 100.0))
-	if data.get("boost_active", false):
-		boost_label.modulate = Color(0.65, 1.0, 0.35)
-	else:
-		boost_label.modulate = Color(1.0, 1.0, 1.0)
-	combo_label.text = "Combo: x%.2f" % float(data.get("combo", 1.0))
-	time_label.text = "Time: %s" % _format_time(float(data.get("time", 0.0)))
-	enemy_label.text = "Enemies: %d" % data.get("enemies", 0)
+	if radial_hud:
+		radial_hud.set_state(data)
 
 
 func show_state(state: int) -> void:
@@ -177,7 +309,7 @@ func show_state(state: int) -> void:
 			_hide_menu()
 			var score: int = manager.score if manager else 0
 			var high: int = manager.high_score if manager else 0
-			overlay_label.text = "RUN ENDED\n\nScore %d\nHigh %d\n\nR to restart" % [score, high]
+			overlay_label.text = "%s\n\n%s %d\n%s %d\n\n%s" % [t("gameover_title"), t("hud_score"), score, t("hud_high"), high, t("gameover_restart")]
 		_:
 			overlay.visible = false
 			overlay_label.visible = false
@@ -227,6 +359,11 @@ func damage_feedback(_amount: float) -> void:
 	flash_timer = 0.24
 
 
+func register_damage_direction(world_position: Vector3) -> void:
+	if radial_hud:
+		radial_hud.register_damage(world_position)
+
+
 func heal_feedback(_amount: float) -> void:
 	if not damage_flash_enabled:
 		return
@@ -234,41 +371,41 @@ func heal_feedback(_amount: float) -> void:
 	flash_timer = 0.22
 	ready_timer = 0.35
 	ready_label.modulate.a = 1.0
-	ready_label.text = "HEAL"
+	ready_label.text = t("cue_heal")
 
 
 func extra_ready_feedback() -> void:
 	ready_timer = 1.1
 	ready_label.modulate.a = 1.0
-	ready_label.text = "EXTRA READY"
+	ready_label.text = t("ready_extra")
 	_play_tone(880.0, 0.12)
 
 
 func boost_ready_feedback() -> void:
 	ready_timer = 0.9
 	ready_label.modulate.a = 1.0
-	ready_label.text = "BOOST READY"
+	ready_label.text = t("ready_boost")
 	_play_tone(660.0, 0.1)
 
 
 func orbital_shield_ready_feedback() -> void:
 	ready_timer = 1.1
 	ready_label.modulate.a = 1.0
-	ready_label.text = "SHIELD READY"
+	ready_label.text = t("ready_shield")
 	_play_tone(1040.0, 0.12)
 
 
 func orbital_shield_feedback() -> void:
 	ready_timer = 0.5
 	ready_label.modulate.a = 1.0
-	ready_label.text = "SHIELD"
+	ready_label.text = t("cue_shield")
 	_play_tone(440.0, 0.08)
 
 
 func boost_feedback() -> void:
 	ready_timer = 0.35
 	ready_label.modulate.a = 1.0
-	ready_label.text = "BOOST"
+	ready_label.text = t("cue_boost")
 
 
 func power_surge_feedback() -> void:
@@ -277,7 +414,7 @@ func power_surge_feedback() -> void:
 		flash_timer = 0.82
 	ready_timer = 1.35
 	ready_label.modulate = Color(0.65, 1.0, 0.95, 1.0)
-	ready_label.text = "POWER SURGE"
+	ready_label.text = t("cue_power_surge")
 	_play_tone(1320.0, 0.16)
 
 
@@ -293,45 +430,18 @@ func _build_ui() -> void:
 	hud.add_theme_constant_override("separation", 4)
 	root.add_child(hud)
 
-	score_label = _make_label(32)
+	# Top-left now carries only compact run text; HP and charge readouts moved to
+	# the curved gauges drawn around the crosshair (see RadialHud).
+	score_label = _make_label(30)
 	score_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.28))
 	score_label.add_theme_constant_override("shadow_offset_x", 2)
 	score_label.add_theme_constant_override("shadow_offset_y", 2)
-	high_score_label = _make_label(16)
-	hp_label = _make_label()
-	charge_label = _make_label()
-	shield_label = _make_label()
-	boost_label = _make_label()
-	combo_label = _make_label()
-	time_label = _make_label()
+	high_score_label = _make_label(15)
+	combo_label = _make_label(16)
+	time_label = _make_label(15)
 	enemy_label = _make_label(14)
 	hud.add_child(score_label)
 	hud.add_child(high_score_label)
-	hud.add_child(hp_label)
-	hud.add_child(charge_label)
-	charge_bar = ProgressBar.new()
-	charge_bar.custom_minimum_size = Vector2(260.0, 14.0)
-	charge_bar.show_percentage = false
-	charge_bar.min_value = 0.0
-	charge_bar.max_value = 100.0
-	_style_charge_bar()
-	hud.add_child(charge_bar)
-	hud.add_child(shield_label)
-	shield_bar = ProgressBar.new()
-	shield_bar.custom_minimum_size = Vector2(260.0, 14.0)
-	shield_bar.show_percentage = false
-	shield_bar.min_value = 0.0
-	shield_bar.max_value = 100.0
-	_style_shield_bar()
-	hud.add_child(shield_bar)
-	hud.add_child(boost_label)
-	boost_bar = ProgressBar.new()
-	boost_bar.custom_minimum_size = Vector2(260.0, 14.0)
-	boost_bar.show_percentage = false
-	boost_bar.min_value = 0.0
-	boost_bar.max_value = 100.0
-	_style_boost_bar()
-	hud.add_child(boost_bar)
 	hud.add_child(combo_label)
 	hud.add_child(time_label)
 	hud.add_child(enemy_label)
@@ -361,6 +471,13 @@ func _build_ui() -> void:
 	_build_menu()
 	_build_start_controls_hint()
 	_build_tutorial_panel()
+
+	radial_hud = RadialHud.new()
+	radial_hud.set_anchors_preset(Control.PRESET_FULL_RECT)
+	radial_hud.z_index = 16
+	radial_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	radial_hud.visible = false
+	root.add_child(radial_hud)
 
 	reticle_dot = ColorRect.new()
 	reticle_dot.anchor_left = 0.5
@@ -430,11 +547,11 @@ func _build_main_menu() -> void:
 	main_menu_panel.add_theme_constant_override("separation", 0)
 	menu_root.add_child(main_menu_panel)
 
-	_add_main_menu_button("PLAY", "_on_play_pressed")
+	_add_main_menu_button("play", "_on_play_pressed")
 	_add_main_menu_tutorial_button()
-	_add_main_menu_button("RANKING", "_on_ranking_pressed")
-	_add_main_menu_button("SETTINGS", "_on_settings_pressed")
-	_add_main_menu_button("QUIT", "_on_quit_pressed")
+	_add_main_menu_button("ranking", "_on_ranking_pressed")
+	_add_main_menu_button("settings", "_on_settings_pressed")
+	_add_main_menu_button("quit", "_on_quit_pressed")
 
 
 func _build_pause_menu() -> void:
@@ -445,11 +562,11 @@ func _build_pause_menu() -> void:
 	pause_panel.visible = false
 	menu_root.add_child(pause_panel)
 
-	_add_pause_menu_button("RESUME", "_on_resume_pressed")
-	_add_pause_menu_button("RANKING", "_on_ranking_pressed")
-	_add_pause_menu_button("SETTINGS", "_on_settings_pressed")
-	_add_pause_menu_button("MAIN MENU", "_on_main_menu_pressed")
-	_add_pause_menu_button("QUIT", "_on_quit_pressed")
+	_add_pause_menu_button("resume", "_on_resume_pressed")
+	_add_pause_menu_button("ranking", "_on_ranking_pressed")
+	_add_pause_menu_button("settings", "_on_settings_pressed")
+	_add_pause_menu_button("main_menu", "_on_main_menu_pressed")
+	_add_pause_menu_button("quit", "_on_quit_pressed")
 
 
 func _build_leaderboard_menu() -> void:
@@ -479,6 +596,9 @@ func _build_leaderboard_menu() -> void:
 	header.add_child(rank_head)
 	header.add_child(name_head)
 	header.add_child(score_head)
+	_loc(rank_head, "col_rank")
+	_loc(name_head, "col_pilot")
+	_loc(score_head, "col_score")
 
 	leaderboard_rows = VBoxContainer.new()
 	leaderboard_rows.add_theme_constant_override("separation", 0)
@@ -489,19 +609,21 @@ func _build_leaderboard_menu() -> void:
 	footer.size = Vector2(1060.0, 54.0)
 	footer.add_theme_constant_override("separation", 0)
 	leaderboard_panel.add_child(footer)
-	var back := _make_menu_button("BACK", 30)
+	var back := _make_menu_button("", 30)
 	back.custom_minimum_size = Vector2(260.0, 54.0)
 	back.pressed.connect(Callable(self, "_on_back_pressed"))
 	footer.add_child(back)
+	_loc(back, "back")
 	var label := _make_label(30)
-	label.text = "LOCAL BOARD"
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.custom_minimum_size = Vector2(540.0, 54.0)
 	footer.add_child(label)
-	var refresh := _make_menu_button("REFRESH", 30)
+	_loc(label, "local_board")
+	var refresh := _make_menu_button("", 30)
 	refresh.custom_minimum_size = Vector2(260.0, 54.0)
 	refresh.pressed.connect(Callable(self, "_populate_leaderboard"))
 	footer.add_child(refresh)
+	_loc(refresh, "refresh")
 
 
 func _build_settings_menu() -> void:
@@ -515,13 +637,15 @@ func _build_settings_menu() -> void:
 	top_tabs.size = Vector2(1068.0, 70.0)
 	top_tabs.add_theme_constant_override("separation", 0)
 	settings_panel.add_child(top_tabs)
-	var tabs: Array[String] = ["VIDEO", "HUD", "KEYS", "PAD"]
+	var tabs: Array = [["video", "tab_video"], ["hud", "tab_hud"], ["keys", "tab_keys"], ["pad", "tab_pad"]]
 	for tab_index in range(tabs.size()):
-		var tab: String = tabs[tab_index]
-		var button := _make_menu_button(tab, 29)
+		var tab_id: String = tabs[tab_index][0]
+		var tab_key: String = tabs[tab_index][1]
+		var button := _make_menu_button("", 29)
 		button.custom_minimum_size = Vector2(267.0, 70.0)
-		button.pressed.connect(Callable(self, "_show_settings_tab").bind(tab.to_lower()))
+		button.pressed.connect(Callable(self, "_show_settings_tab").bind(tab_id))
 		top_tabs.add_child(button)
+		_loc(button, tab_key)
 
 	var body := PanelContainer.new()
 	body.position = Vector2(0.0, 70.0)
@@ -539,22 +663,25 @@ func _build_settings_menu() -> void:
 	bottom.size = Vector2(520.0, 62.0)
 	bottom.add_theme_constant_override("separation", 0)
 	settings_panel.add_child(bottom)
-	var back := _make_menu_button("BACK", 30)
+	var back := _make_menu_button("", 30)
 	back.custom_minimum_size = Vector2(260.0, 62.0)
 	back.pressed.connect(Callable(self, "_on_back_pressed"))
 	bottom.add_child(back)
-	var reset := _make_menu_button("RESET", 30)
+	_loc(back, "back")
+	var reset := _make_menu_button("", 30)
 	reset.custom_minimum_size = Vector2(260.0, 62.0)
 	reset.pressed.connect(Callable(self, "_reset_settings"))
 	bottom.add_child(reset)
+	_loc(reset, "reset")
 
 
-func _add_main_menu_button(text: String, callback: String) -> void:
-	var button := _make_menu_button(text, 34)
+func _add_main_menu_button(key: String, callback: String) -> void:
+	var button := _make_menu_button("", 34)
 	button.custom_minimum_size = Vector2(180.0, 92.0)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.pressed.connect(Callable(self, callback))
 	main_menu_panel.add_child(button)
+	_loc(button, key)
 
 
 func _add_main_menu_tutorial_button() -> void:
@@ -577,12 +704,12 @@ func _add_main_menu_tutorial_button() -> void:
 	content.add_child(tutorial_button_icon)
 
 	tutorial_button_label = _make_label(24)
-	tutorial_button_label.text = "TUTORIAL"
 	tutorial_button_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tutorial_button_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tutorial_button_label.add_theme_color_override("font_color", Color(0.98, 0.99, 1.0))
 	tutorial_button_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content.add_child(tutorial_button_label)
+	_loc(tutorial_button_label, "tutorial")
 
 	# Keep the icon and label readable against the light hover background.
 	button.mouse_entered.connect(Callable(self, "_on_tutorial_button_hover").bind(true))
@@ -623,11 +750,12 @@ func _make_grad_cap_icon() -> Control:
 	return holder
 
 
-func _add_pause_menu_button(text: String, callback: String) -> void:
-	var button := _make_menu_button(text, 34)
+func _add_pause_menu_button(key: String, callback: String) -> void:
+	var button := _make_menu_button("", 34)
 	button.custom_minimum_size = Vector2(420.0, 74.0)
 	button.pressed.connect(Callable(self, callback))
 	pause_panel.add_child(button)
+	_loc(button, key)
 
 
 func _show_pause_screen() -> void:
@@ -635,7 +763,7 @@ func _show_pause_screen() -> void:
 		return
 	active_menu_screen = "pause"
 	menu_root.visible = true
-	menu_title.text = "PAUSED"
+	menu_title.text = t("paused")
 	main_menu_panel.visible = false
 	pause_panel.visible = true
 	leaderboard_panel.visible = false
@@ -654,10 +782,10 @@ func _show_menu_screen(screen: String) -> void:
 	if screen == "main":
 		menu_title.text = "ORBITAL SWARM"
 	elif screen == "leaderboard":
-		menu_title.text = "RANKING"
+		menu_title.text = t("ranking")
 		_populate_leaderboard()
 	else:
-		menu_title.text = "SETTINGS"
+		menu_title.text = t("settings")
 		_show_settings_tab(settings_tab)
 
 
@@ -767,34 +895,35 @@ func _show_settings_tab(tab: String) -> void:
 	key_value_labels.clear()
 	match settings_tab:
 		"hud":
-			_add_setting_row("RETICLE", "reticle")
-			_add_setting_row("START HINT", "start_hint")
-			_add_setting_row("LOW HEALTH FILTER", "low_health")
-			_add_setting_row("FLASHES", "damage_flash")
+			_add_setting_row(t("set_language"), "language")
+			_add_setting_row(t("set_reticle"), "reticle")
+			_add_setting_row(t("set_start_hint"), "start_hint")
+			_add_setting_row(t("set_low_health"), "low_health")
+			_add_setting_row(t("set_flashes"), "damage_flash")
 		"keys":
-			_add_keybind_row("FORWARD", "forward")
-			_add_keybind_row("BACKWARD", "backward")
-			_add_keybind_row("LEFT", "left")
-			_add_keybind_row("RIGHT", "right")
-			_add_readonly_row("EXTRA SHOT", "[LMB]")
-			_add_readonly_row("SHIELD", "[RMB]")
-			_add_keybind_row("JUMP / ENEMY JUMP", "jump")
-			_add_keybind_row("BOOST", "boost")
-			_add_keybind_row("MENU", "menu")
+			_add_keybind_row(t("key_forward"), "forward")
+			_add_keybind_row(t("key_backward"), "backward")
+			_add_keybind_row(t("key_left"), "left")
+			_add_keybind_row(t("key_right"), "right")
+			_add_readonly_row(t("key_extra"), "[LMB]")
+			_add_readonly_row(t("key_shield"), "[RMB]")
+			_add_keybind_row(t("key_jump"), "jump")
+			_add_keybind_row(t("key_boost"), "boost")
+			_add_keybind_row(t("key_menu"), "menu")
 		"pad":
-			_add_readonly_row("MOVE", "[LS]")
-			_add_readonly_row("LOOK", "[RS]")
-			_add_readonly_row("SHOOT", "[RB]")
-			_add_readonly_row("JUMP", "[LB]")
-			_add_readonly_row("BOOST", "[LT]")
-			_add_readonly_row("MENU", "[START]")
+			_add_readonly_row(t("pad_move"), "[LS]")
+			_add_readonly_row(t("pad_look"), "[RS]")
+			_add_readonly_row(t("pad_shoot"), "[RB]")
+			_add_readonly_row(t("pad_jump"), "[LB]")
+			_add_readonly_row(t("pad_boost"), "[LT]")
+			_add_readonly_row(t("pad_menu"), "[START]")
 		_:
-			_add_setting_row("RESOLUTION", "resolution")
-			_add_setting_row("FULLSCREEN", "fullscreen")
-			_add_setting_row("FPS LIMIT", "fps")
-			_add_setting_row("FIELD OF VIEW", "fov")
-			_add_setting_row("SENSITIVITY", "sensitivity")
-			_add_setting_row("EFFECTS VOLUME", "effects_volume")
+			_add_setting_row(t("set_resolution"), "resolution")
+			_add_setting_row(t("set_fullscreen"), "fullscreen")
+			_add_setting_row(t("set_fps"), "fps")
+			_add_setting_row(t("set_fov"), "fov")
+			_add_setting_row(t("set_sensitivity"), "sensitivity")
+			_add_setting_row(t("set_volume"), "effects_volume")
 	_update_settings_labels()
 	_update_keybind_labels()
 
@@ -870,8 +999,13 @@ func _adjust_setting(setting_name: String, direction: int) -> void:
 			low_health_filter_enabled = not low_health_filter_enabled
 		"damage_flash":
 			damage_flash_enabled = not damage_flash_enabled
+		"language":
+			var index: int = maxi(0, languages.find(language))
+			set_language(languages[wrapi(index + direction, 0, languages.size())])
+			return
 	_apply_settings()
 	_update_settings_labels()
+	_save_settings()
 
 
 func _begin_key_rebind(action_name: String) -> void:
@@ -887,7 +1021,7 @@ func _update_keybind_labels() -> void:
 		if not button:
 			continue
 		if action_name == rebinding_action:
-			button.text = "PRESS KEY..."
+			button.text = t("press_key")
 		else:
 			button.text = "[%s]" % _format_key_name(get_bound_key(action_name, 0))
 
@@ -911,7 +1045,58 @@ func _reset_settings() -> void:
 	low_health_filter_enabled = true
 	damage_flash_enabled = true
 	_apply_settings()
+	_save_settings()
 	_show_settings_tab(settings_tab)
+
+
+const SETTINGS_PATH := "user://bullet_hell_settings.cfg"
+
+
+func _save_settings() -> void:
+	var config := ConfigFile.new()
+	config.set_value("settings", "resolution_index", setting_resolution_index)
+	config.set_value("settings", "fps_index", setting_fps_index)
+	config.set_value("settings", "fullscreen", setting_fullscreen)
+	config.set_value("settings", "fov", setting_fov)
+	config.set_value("settings", "sensitivity", setting_sensitivity)
+	config.set_value("settings", "effects_volume", setting_effects_volume)
+	config.set_value("settings", "reticle", reticle_enabled)
+	config.set_value("settings", "start_hint", start_hint_enabled)
+	config.set_value("settings", "low_health", low_health_filter_enabled)
+	config.set_value("settings", "damage_flash", damage_flash_enabled)
+	config.set_value("settings", "language", language)
+	for action_name in key_bindings.keys():
+		config.set_value("keys", str(action_name), int(key_bindings[action_name]))
+	config.save(SETTINGS_PATH)
+
+
+func _load_settings() -> void:
+	var config := ConfigFile.new()
+	if config.load(SETTINGS_PATH) != OK:
+		return
+	setting_resolution_index = clampi(int(config.get_value("settings", "resolution_index", setting_resolution_index)), 0, resolution_options.size() - 1)
+	setting_fps_index = clampi(int(config.get_value("settings", "fps_index", setting_fps_index)), 0, fps_options.size() - 1)
+	setting_fullscreen = bool(config.get_value("settings", "fullscreen", setting_fullscreen))
+	setting_fov = clamp(float(config.get_value("settings", "fov", setting_fov)), 70.0, 120.0)
+	setting_sensitivity = clamp(float(config.get_value("settings", "sensitivity", setting_sensitivity)), 0.0008, 0.006)
+	setting_effects_volume = clamp(float(config.get_value("settings", "effects_volume", setting_effects_volume)), 0.0, 1.0)
+	reticle_enabled = bool(config.get_value("settings", "reticle", reticle_enabled))
+	start_hint_enabled = bool(config.get_value("settings", "start_hint", start_hint_enabled))
+	low_health_filter_enabled = bool(config.get_value("settings", "low_health", low_health_filter_enabled))
+	damage_flash_enabled = bool(config.get_value("settings", "damage_flash", damage_flash_enabled))
+	for action_name in key_bindings.keys():
+		key_bindings[action_name] = int(config.get_value("keys", str(action_name), key_bindings[action_name]))
+	# Apply the persisted window mode/size immediately on startup.
+	if setting_fullscreen:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+	else:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		DisplayServer.window_set_size(resolution_options[setting_resolution_index])
+	# The UI was built in the default language; refresh it if a language was saved.
+	var saved_language: String = str(config.get_value("settings", "language", language))
+	if languages.has(saved_language) and saved_language != language:
+		language = saved_language
+		_apply_language()
 
 
 func _sync_settings_from_manager() -> void:
@@ -963,6 +1148,8 @@ func _update_settings_labels() -> void:
 		_set_setting_value("low_health", "ON" if low_health_filter_enabled else "OFF")
 	if setting_value_labels.has("damage_flash"):
 		_set_setting_value("damage_flash", "ON" if damage_flash_enabled else "OFF")
+	if setting_value_labels.has("language"):
+		_set_setting_value("language", t("lang_value"))
 
 
 func _set_setting_value(setting_name: String, text: String) -> void:
@@ -972,9 +1159,11 @@ func _set_setting_value(setting_name: String, text: String) -> void:
 
 
 func _refresh_reticle() -> void:
+	var in_action: bool = current_ui_state == GameManager.RunState.PLAYING or current_ui_state == GameManager.RunState.TUTORIAL
 	if reticle_dot:
-		var in_action: bool = current_ui_state == GameManager.RunState.PLAYING or current_ui_state == GameManager.RunState.TUTORIAL
 		reticle_dot.visible = reticle_enabled and in_action
+	if radial_hud:
+		radial_hud.visible = in_action
 
 
 func _make_menu_button(text: String, font_size := 28) -> Button:
@@ -1048,25 +1237,36 @@ func _build_start_controls_hint() -> void:
 	start_hint_panel.modulate = Color(1.0, 1.0, 1.0, 0.0)
 	root.add_child(start_hint_panel)
 
-	var stack := VBoxContainer.new()
-	stack.position = Vector2(104.0, 158.0)
-	stack.size = Vector2(560.0, 340.0)
-	stack.custom_minimum_size = Vector2(560.0, 340.0)
-	stack.add_theme_constant_override("separation", 5)
-	start_hint_panel.add_child(stack)
+	start_hint_stack = VBoxContainer.new()
+	start_hint_stack.position = Vector2(104.0, 158.0)
+	start_hint_stack.size = Vector2(560.0, 340.0)
+	start_hint_stack.custom_minimum_size = Vector2(560.0, 340.0)
+	start_hint_stack.add_theme_constant_override("separation", 5)
+	start_hint_panel.add_child(start_hint_stack)
+	_populate_start_hint_rows()
 
-	_add_start_hint_row(stack, "[MOUSE]", "LOOK")
-	_add_start_hint_separator(stack)
-	_add_start_hint_row(stack, "[W] [A] [S] [D]", "MOVE")
-	_add_start_hint_separator(stack)
-	_add_start_hint_row(stack, "[SHIFT]", "BOOST")
-	_add_start_hint_separator(stack)
-	_add_start_hint_row(stack, "[LMB]", "EXTRA SHOT")
-	_add_start_hint_separator(stack)
-	_add_start_hint_row(stack, "[RMB]", "SHIELD")
-	_add_start_hint_separator(stack)
-	_add_start_hint_row(stack, "[SPACE]", "JUMP")
-	_add_start_hint_row(stack, "[SPACE] ON ENEMY", "ENEMY JUMP")
+
+func _populate_start_hint_rows() -> void:
+	if not start_hint_stack:
+		return
+	for child in start_hint_stack.get_children():
+		child.queue_free()
+	_add_start_hint_row(start_hint_stack, "[MOUSE]", t("hint_look"))
+	_add_start_hint_separator(start_hint_stack)
+	_add_start_hint_row(start_hint_stack, "[W] [A] [S] [D]", t("hint_move"))
+	_add_start_hint_separator(start_hint_stack)
+	_add_start_hint_row(start_hint_stack, "[SHIFT]", t("hint_boost"))
+	_add_start_hint_separator(start_hint_stack)
+	_add_start_hint_row(start_hint_stack, "[LMB]", t("hint_extra"))
+	_add_start_hint_separator(start_hint_stack)
+	_add_start_hint_row(start_hint_stack, "[RMB]", t("hint_shield"))
+	_add_start_hint_separator(start_hint_stack)
+	_add_start_hint_row(start_hint_stack, "[SPACE]", t("hint_jump"))
+	_add_start_hint_row(start_hint_stack, "[SPACE] %s" % ("ON ENEMY" if language == "en" else "EN ENEMIGO"), t("hint_enemy_jump"))
+
+
+func _rebuild_start_controls_hint() -> void:
+	_populate_start_hint_rows()
 
 
 func _add_start_hint_row(parent: VBoxContainer, control_text: String, action_text: String) -> void:
@@ -1160,10 +1360,10 @@ func _build_tutorial_panel() -> void:
 	stack.add_child(tutorial_status_label)
 
 	var hint := _make_label(15)
-	hint.text = "[ESC] salir     ·     [N] saltar paso"
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.add_theme_color_override("font_color", Color(0.6, 0.78, 0.9, 0.82))
 	stack.add_child(hint)
+	_loc(hint, "tut_hint")
 
 
 func show_tutorial_panel(panel_visible: bool) -> void:
@@ -1175,20 +1375,20 @@ func set_tutorial_stage(index: int, total: int, title: String, objective: String
 	if not tutorial_panel:
 		return
 	tutorial_panel.visible = true
-	tutorial_step_label.text = "PASO %d / %d" % [index, total]
+	tutorial_step_label.text = "%s %d / %d" % [t("tut_step"), index, total]
 	tutorial_title_label.text = title
 	tutorial_objective_label.text = objective
-	tutorial_status_label.text = "> OBJETIVO <"
+	tutorial_status_label.text = t("tut_objective")
 	tutorial_status_label.add_theme_color_override("font_color", Color(0.55, 0.95, 1.0))
 
 
 func tutorial_stage_complete() -> void:
 	if tutorial_status_label:
-		tutorial_status_label.text = "¡COMPLETADO!"
+		tutorial_status_label.text = t("tut_complete")
 		tutorial_status_label.add_theme_color_override("font_color", Color(0.45, 1.0, 0.55))
 	ready_timer = 0.95
 	ready_label.modulate = Color(0.45, 1.0, 0.55, 1.0)
-	ready_label.text = "¡COMPLETADO!"
+	ready_label.text = t("tut_complete")
 	_play_tone(990.0, 0.12)
 
 
@@ -1196,12 +1396,12 @@ func tutorial_finished() -> void:
 	if not tutorial_panel:
 		return
 	tutorial_step_label.text = ""
-	tutorial_title_label.text = "¡TUTORIAL COMPLETADO!"
-	tutorial_objective_label.text = "Ya dominas todos los elementos. ¡Buena caza, piloto!"
+	tutorial_title_label.text = t("tut_finished_title")
+	tutorial_objective_label.text = t("tut_finished_body")
 	tutorial_status_label.text = ""
 	ready_timer = 1.6
 	ready_label.modulate = Color(0.65, 1.0, 0.95, 1.0)
-	ready_label.text = "¡COMPLETADO!"
+	ready_label.text = t("tut_complete")
 	_play_tone(1320.0, 0.18)
 
 
@@ -1213,39 +1413,6 @@ func _make_label(size := 18) -> Label:
 	label.add_theme_constant_override("shadow_offset_x", 1)
 	label.add_theme_constant_override("shadow_offset_y", 1)
 	return label
-
-
-func _style_charge_bar() -> void:
-	var background := StyleBoxFlat.new()
-	background.bg_color = Color(0.04, 0.06, 0.08, 0.86)
-	background.border_color = Color(0.25, 0.55, 0.7)
-	background.set_border_width_all(1)
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = Color(0.2, 0.85, 1.0, 0.94)
-	charge_bar.add_theme_stylebox_override("background", background)
-	charge_bar.add_theme_stylebox_override("fill", fill)
-
-
-func _style_boost_bar() -> void:
-	var background := StyleBoxFlat.new()
-	background.bg_color = Color(0.04, 0.07, 0.05, 0.86)
-	background.border_color = Color(0.45, 0.8, 0.28)
-	background.set_border_width_all(1)
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = Color(0.45, 1.0, 0.25, 0.94)
-	boost_bar.add_theme_stylebox_override("background", background)
-	boost_bar.add_theme_stylebox_override("fill", fill)
-
-
-func _style_shield_bar() -> void:
-	var background := StyleBoxFlat.new()
-	background.bg_color = Color(0.03, 0.055, 0.075, 0.88)
-	background.border_color = Color(0.32, 0.8, 0.95)
-	background.set_border_width_all(1)
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = Color(0.38, 0.94, 1.0, 0.95)
-	shield_bar.add_theme_stylebox_override("background", background)
-	shield_bar.add_theme_stylebox_override("fill", fill)
 
 
 func _format_time(seconds: float) -> String:

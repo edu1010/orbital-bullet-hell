@@ -99,6 +99,11 @@ var next_power_surge_score := 10000
 var power_surge_end_msec := 0
 var start_controls_hint_visible := false
 var score_magnets_collected := 0
+var enemy_warn_radius := 28.0
+var warn_active := false
+var warn_position := Vector3.ZERO
+var warn_distance := 0.0
+var warn_is_bomb := false
 
 
 func configure(
@@ -875,22 +880,36 @@ func _handle_player_enemy_contacts() -> void:
 	# brushed enemy does not abort the lesson the player is practicing.
 	var safe: bool = is_tutorial()
 	var player_hit_point: Vector3 = player.global_position
+	# Reuse this single pass over the swarm to also find the nearest threat for the
+	# crosshair proximity warning instead of looping the (potentially huge) list again.
+	var nearest_distance: float = INF
+	var nearest_enemy: EnemyBase = null
 	for enemy in active_enemies:
 		if not enemy.active:
 			continue
+		var distance: float = enemy.global_position.distance_to(player_hit_point)
+		if distance < nearest_distance and not player.is_enemy_platform_contact(enemy):
+			nearest_distance = distance
+			nearest_enemy = enemy
 		if enemy is BombEnemy:
-			if enemy.global_position.distance_to(player_hit_point) <= (enemy as BombEnemy).contact_radius:
+			if distance <= (enemy as BombEnemy).contact_radius:
 				if not safe:
 					player.apply_damage(player.max_hp, enemy.global_position)
 				detonate_bomb(enemy as BombEnemy, "touch")
 			continue
 		if player.is_enemy_platform_contact(enemy):
 			continue
-		if enemy.global_position.distance_to(player_hit_point) <= enemy.body_radius:
-			if safe:
-				continue
-			player.apply_damage(player.max_hp, enemy.global_position)
-			break
+		if distance <= enemy.body_radius:
+			if not safe:
+				player.apply_damage(player.max_hp, enemy.global_position)
+				break
+	if nearest_enemy and nearest_distance <= enemy_warn_radius:
+		warn_active = true
+		warn_position = nearest_enemy.global_position
+		warn_distance = nearest_distance
+		warn_is_bomb = nearest_enemy is BombEnemy
+	else:
+		warn_active = false
 
 
 func _update_ui() -> void:
@@ -913,6 +932,11 @@ func _update_ui() -> void:
 		"time": survival_time,
 		"enemies": active_enemy_count(),
 		"invulnerable": player.is_invulnerable(),
+		"warn_active": warn_active,
+		"warn_position": warn_position,
+		"warn_distance": warn_distance,
+		"warn_is_bomb": warn_is_bomb,
+		"warn_radius": enemy_warn_radius,
 	})
 
 

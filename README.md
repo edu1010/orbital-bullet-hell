@@ -21,6 +21,19 @@ Open this folder in Godot 4.x and run `res://scenes/Main.tscn` or press Play. Th
 
 Primary fire is automatic while a run is active.
 
+## Saving
+
+Progress and preferences persist between sessions via Godot `ConfigFile` saves in
+`user://`:
+
+- `abstract_swarm_highscore.cfg` — best score.
+- `bullet_hell_settings.cfg` — all settings (resolution, fullscreen, FPS limit, FOV,
+  sensitivity, volume, HUD toggles, language) and every key rebind. Saved on each
+  change and reloaded on startup.
+
+The language toggle (English / Español) lives in Settings → HUD and re-localizes the
+whole UI, including the tutorial, on the fly.
+
 ## Tutorial
 
 The main menu has a `TUTORIAL` button (marked with a graduation-cap icon). It launches

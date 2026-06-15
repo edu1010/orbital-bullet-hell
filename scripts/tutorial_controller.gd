@@ -11,67 +11,21 @@ const COMPLETE_HOLD := 1.5
 const FINISH_HOLD := 3.0
 const MOVE_DISTANCE_GOAL := 16.0
 
+# Titles and objectives are translation keys resolved against the GameUI string
+# table, so the tutorial follows the EN/ES language toggle like the rest of the UI.
 const STAGES: Array[Dictionary] = [
-	{
-		"id": "move",
-		"title": "MOVIMIENTO",
-		"objective": "Muévete con [W][A][S][D] y mira con el [RATÓN].",
-	},
-	{
-		"id": "jump",
-		"title": "SALTO",
-		"objective": "Pulsa [ESPACIO] para saltar. Púlsalo de nuevo en el aire para el doble salto.",
-	},
-	{
-		"id": "shoot",
-		"title": "DISPARO PRIMARIO",
-		"objective": "Tu arma dispara sola. Apunta al enemigo y destrúyelo.",
-	},
-	{
-		"id": "enemy_jump",
-		"title": "SALTO SOBRE ENEMIGO",
-		"objective": "Sube encima del enemigo y rebota con [ESPACIO] para recargar el escudo.",
-	},
-	{
-		"id": "extra",
-		"title": "DISPARO EXTRA",
-		"objective": "Carga lista. Pulsa [CLIC IZQ] para lanzar el rayo y barrer a los enemigos.",
-	},
-	{
-		"id": "shield",
-		"title": "ESCUDO ORBITAL",
-		"objective": "Carga lista. Pulsa [CLIC DER] para lanzar el escudo y elevarte.",
-	},
-	{
-		"id": "boost",
-		"title": "IMPULSO",
-		"objective": "Carga lista. Pulsa [SHIFT] para impulsarte a gran velocidad.",
-	},
-	{
-		"id": "charger",
-		"title": "ENEMIGO: CARGADOR",
-		"objective": "Destruye al Cargador. Zigzaguea para alcanzarte: síguelo con la mira.",
-	},
-	{
-		"id": "avoider",
-		"title": "ENEMIGO: ESQUIVADOR",
-		"objective": "Destruye al Esquivador. Esquiva tus balas, ¡acércate y acorrálalo!",
-	},
-	{
-		"id": "bomb",
-		"title": "BOMBA",
-		"objective": "Detona la Bomba disparándole desde lejos. ¡Jamás la toques en una partida real!",
-	},
-	{
-		"id": "reflector",
-		"title": "REFLECTOR DE CURA",
-		"objective": "Dispárale al Reflector para atraerlo: te curará y lanzará rayos sanadores.",
-	},
-	{
-		"id": "magnet",
-		"title": "IMÁN DE PUNTOS",
-		"objective": "Recoge el Imán para atraer hacia ti todos los fragmentos de puntos.",
-	},
+	{"id": "move", "title_key": "tut_move_title", "obj_key": "tut_move_obj"},
+	{"id": "jump", "title_key": "tut_jump_title", "obj_key": "tut_jump_obj"},
+	{"id": "shoot", "title_key": "tut_shoot_title", "obj_key": "tut_shoot_obj"},
+	{"id": "enemy_jump", "title_key": "tut_enemy_jump_title", "obj_key": "tut_enemy_jump_obj"},
+	{"id": "extra", "title_key": "tut_extra_title", "obj_key": "tut_extra_obj"},
+	{"id": "shield", "title_key": "tut_shield_title", "obj_key": "tut_shield_obj"},
+	{"id": "boost", "title_key": "tut_boost_title", "obj_key": "tut_boost_obj"},
+	{"id": "charger", "title_key": "tut_charger_title", "obj_key": "tut_charger_obj"},
+	{"id": "avoider", "title_key": "tut_avoider_title", "obj_key": "tut_avoider_obj"},
+	{"id": "bomb", "title_key": "tut_bomb_title", "obj_key": "tut_bomb_obj"},
+	{"id": "reflector", "title_key": "tut_reflector_title", "obj_key": "tut_reflector_obj"},
+	{"id": "magnet", "title_key": "tut_magnet_title", "obj_key": "tut_magnet_obj"},
 ]
 
 var manager: GameManager
@@ -206,7 +160,7 @@ func _setup_stage() -> void:
 			_spawn_reflector_tracked(_front_point(15.0, 5.0))
 		"magnet":
 			_spawn_magnet_demo()
-	ui.set_tutorial_stage(stage_index + 1, STAGES.size(), stage["title"], stage["objective"])
+	ui.set_tutorial_stage(stage_index + 1, STAGES.size(), ui.t(stage["title_key"]), ui.t(stage["obj_key"]))
 
 
 func _maintain_stage(_delta: float) -> void:

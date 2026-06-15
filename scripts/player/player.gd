@@ -103,6 +103,19 @@ var gravity_down := Vector3.DOWN
 var on_gravity_floor := false
 var orbital_shield_visual: MeshInstance3D
 var orbital_shield_material: StandardMaterial3D
+var weapon_root: Node3D
+var weapon_spin: Node3D
+var weapon_muzzle: Marker3D
+var weapon_muzzle_flash: MeshInstance3D
+var muzzle_flash_timer := 0.0
+var weapon_root_base_position := Vector3(0.3, -0.34, -0.48)
+var weapon_bob_time := 0.0
+
+@export_group("Weapon Viewmodel")
+@export var weapon_spin_speed := 15.0
+# Bullets leave the gun muzzle and aim at this distance along the crosshair, so
+# they appear to fire from the barrels yet still converge on where you are looking.
+@export var aim_convergence_distance := 90.0
 
 # Lightweight action counters consumed by the tutorial to detect mechanics.
 var stat_jumps := 0
@@ -126,9 +139,11 @@ func _ready() -> void:
 	camera_base_position = camera.position
 	camera.fov = base_fov
 	_create_orbital_shield_visual()
+	_create_weapon_viewmodel()
 	hp = max_hp
 	up_direction = -gravity_down
 	set_physics_process(true)
+	set_process(true)
 
 
 func reset_for_run(start_position: Vector3) -> void:
@@ -206,6 +221,30 @@ func _physics_process(delta: float) -> void:
 	_update_auto_fire(delta)
 	add_extra_charge(passive_charge_rate * delta)
 	_update_camera_feedback(delta)
+
+
+func _process(delta: float) -> void:
+	if not weapon_root:
+		return
+	var showing: bool = manager != null and manager.is_playing()
+	weapon_root.visible = showing
+	if not showing:
+		return
+	if weapon_spin:
+		weapon_spin.rotate_object_local(Vector3(0.0, 0.0, 1.0), weapon_spin_speed * delta)
+	if muzzle_flash_timer > 0.0 and weapon_muzzle_flash:
+		muzzle_flash_timer = max(0.0, muzzle_flash_timer - delta)
+		weapon_muzzle_flash.visible = true
+		var flash: float = muzzle_flash_timer / 0.05
+		weapon_muzzle_flash.scale = Vector3.ONE * (0.55 + flash * 0.95)
+	elif weapon_muzzle_flash and weapon_muzzle_flash.visible:
+		weapon_muzzle_flash.visible = false
+	# Subtle idle sway and walk bob so the viewmodel feels alive.
+	weapon_bob_time += delta
+	var speed_factor: float = clamp(velocity.slide(gravity_down).length() / max(0.1, move_speed), 0.0, 1.0)
+	var bob: float = sin(weapon_bob_time * 9.0) * (0.004 + speed_factor * 0.012)
+	var sway: float = sin(weapon_bob_time * 1.7) * 0.004
+	weapon_root.position = weapon_root_base_position + Vector3(sway, bob, 0.0)
 
 
 func _update_timers(delta: float) -> void:
@@ -336,9 +375,15 @@ func _update_auto_fire(delta: float) -> void:
 
 
 func _fire_primary() -> void:
-	var direction: Vector3 = -camera.global_transform.basis.z.normalized()
-	manager.request_projectile(muzzle.global_position, direction, projectile_speed)
-	_apply_downward_fire_lift(direction, downward_fire_lift_impulse)
+	# Spawn at the gun muzzle but aim at the crosshair convergence point so the
+	# tracers visibly leave the barrels yet still land where the player is looking.
+	var view_forward: Vector3 = -camera.global_transform.basis.z.normalized()
+	var origin: Vector3 = weapon_muzzle.global_position if weapon_muzzle else muzzle.global_position
+	var aim_point: Vector3 = camera.global_position + view_forward * aim_convergence_distance
+	var direction: Vector3 = (aim_point - origin).normalized()
+	manager.request_projectile(origin, direction, projectile_speed)
+	muzzle_flash_timer = 0.05
+	_apply_downward_fire_lift(view_forward, downward_fire_lift_impulse)
 
 
 func try_fire_extra() -> void:
@@ -459,7 +504,7 @@ func _on_enemy_platform_jump() -> void:
 		manager.spawn_burst(global_position, Color(0.62, 0.96, 1.0), 1.4, 0.16)
 
 
-func apply_damage(amount: float, _hit_position: Vector3) -> bool:
+func apply_damage(amount: float, hit_position: Vector3) -> bool:
 	if orbital_shield_timer > 0.0 or invulnerability_timer > 0.0 or hp <= 0.0:
 		return false
 	hp = max(0.0, hp - amount)
@@ -467,6 +512,7 @@ func apply_damage(amount: float, _hit_position: Vector3) -> bool:
 	add_camera_shake(0.28 if amount >= 1.0 else 0.16, 0.22)
 	if manager and manager.ui:
 		manager.ui.damage_feedback(amount)
+		manager.ui.register_damage_direction(hit_position)
 	if hp <= 0.0 and manager:
 		manager.end_run()
 	return true
@@ -520,6 +566,104 @@ func _create_orbital_shield_visual() -> void:
 	orbital_shield_visual.material_override = orbital_shield_material
 	orbital_shield_visual.visible = false
 	add_child(orbital_shield_visual)
+
+
+func _create_weapon_viewmodel() -> void:
+	# A low-poly rotary gatling cannon built from primitives, parented to the camera
+	# so it tracks the view. The whole barrel cluster spins around the bore, and it
+	# is drawn over the world so it reads as a true first-person viewmodel. Parts are
+	# added back-to-front so the on-top draw keeps a believable painter ordering.
+	weapon_root = Node3D.new()
+	weapon_root.position = weapon_root_base_position
+	weapon_root.rotation_degrees = Vector3(3.0, 8.0, 0.0)
+	camera.add_child(weapon_root)
+
+	var tan: StandardMaterial3D = _make_weapon_material(Color(0.62, 0.55, 0.42), Color(0.3, 0.25, 0.16), 0.28)
+	var tan_dark: StandardMaterial3D = _make_weapon_material(Color(0.42, 0.37, 0.28), Color(0.18, 0.15, 0.1), 0.2)
+	var dark_metal: StandardMaterial3D = _make_weapon_material(Color(0.12, 0.11, 0.1), Color(0.06, 0.05, 0.04), 0.12)
+	var brass: StandardMaterial3D = _make_weapon_material(Color(0.66, 0.5, 0.2), Color(0.6, 0.42, 0.12), 0.8)
+	var muzzle_glow: StandardMaterial3D = _make_weapon_material(Color(1.0, 0.66, 0.3), Color(1.0, 0.55, 0.2), 2.6)
+
+	# Rear housing / receiver and the motor block, plus grip and ammo drum.
+	_add_weapon_box(weapon_root, tan, Vector3(0.2, 0.19, 0.26), Vector3(0.0, 0.0, 0.12))
+	_add_weapon_box(weapon_root, dark_metal, Vector3(0.07, 0.18, 0.12), Vector3(0.0, -0.16, 0.16), Vector3(16.0, 0.0, 0.0))
+	_add_weapon_box(weapon_root, tan_dark, Vector3(0.17, 0.17, 0.14), Vector3(-0.16, -0.04, 0.14))
+	_add_weapon_box(weapon_root, brass, Vector3(0.03, 0.03, 0.16), Vector3(-0.05, 0.02, 0.1), Vector3(0.0, 0.0, 26.0))
+	_add_weapon_cylinder(weapon_root, tan, 0.11, 0.16, 6, Vector3(0.0, 0.0, -0.02))
+
+	# Spinning barrel assembly mounted on the bore axis.
+	weapon_spin = Node3D.new()
+	weapon_spin.position = Vector3(0.0, 0.0, -0.12)
+	weapon_root.add_child(weapon_spin)
+	# Rear and front hub discs that carry the barrels (added first = drawn behind).
+	_add_weapon_cylinder(weapon_spin, tan_dark, 0.09, 0.05, 6, Vector3(0.0, 0.0, 0.0))
+	_add_weapon_cylinder(weapon_spin, dark_metal, 0.02, 0.62, 6, Vector3(0.0, 0.0, -0.32))
+	# Six longer barrels arranged in a ring around the bore so the cluster reads clearly.
+	for i in range(6):
+		var barrel_angle: float = TAU * float(i) / 6.0
+		var ring_offset: Vector3 = Vector3(cos(barrel_angle), sin(barrel_angle), 0.0) * 0.066
+		var barrel_material: StandardMaterial3D = tan if i % 2 == 0 else tan_dark
+		_add_weapon_cylinder(weapon_spin, barrel_material, 0.024, 0.62, 6, ring_offset + Vector3(0.0, 0.0, -0.32))
+	# Front hub disc (added last = drawn over the barrels from the player's view).
+	_add_weapon_cylinder(weapon_spin, tan, 0.092, 0.05, 6, Vector3(0.0, 0.0, -0.62))
+
+	# Muzzle marker (bullet origin) and a flash that pulses on every shot.
+	weapon_muzzle = Marker3D.new()
+	weapon_muzzle.position = Vector3(0.0, 0.0, -0.74)
+	weapon_root.add_child(weapon_muzzle)
+	weapon_muzzle_flash = MeshInstance3D.new()
+	var flash_mesh := SphereMesh.new()
+	flash_mesh.radius = 0.1
+	flash_mesh.height = 0.2
+	flash_mesh.radial_segments = 6
+	flash_mesh.rings = 3
+	weapon_muzzle_flash.mesh = flash_mesh
+	weapon_muzzle_flash.material_override = muzzle_glow
+	weapon_muzzle_flash.position = Vector3(0.0, 0.0, -0.76)
+	weapon_muzzle_flash.visible = false
+	weapon_root.add_child(weapon_muzzle_flash)
+
+	weapon_root.visible = false
+
+
+func _make_weapon_material(albedo: Color, emission: Color, emission_energy: float) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = albedo
+	material.roughness = 0.55
+	material.metallic = 0.45
+	material.emission_enabled = true
+	material.emission = emission
+	material.emission_energy_multiplier = emission_energy
+	# Draw over the world so swarmers passing the corner never clip through the gun.
+	material.no_depth_test = true
+	material.render_priority = 2
+	return material
+
+
+func _add_weapon_box(parent: Node3D, material: Material, box_size: Vector3, local_position: Vector3, local_rotation_degrees: Vector3 = Vector3.ZERO) -> void:
+	var mesh := BoxMesh.new()
+	mesh.size = box_size
+	var part := MeshInstance3D.new()
+	part.mesh = mesh
+	part.material_override = material
+	part.position = local_position
+	part.rotation_degrees = local_rotation_degrees
+	parent.add_child(part)
+
+
+func _add_weapon_cylinder(parent: Node3D, material: Material, radius: float, length: float, sides: int, local_position: Vector3) -> void:
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = radius
+	mesh.bottom_radius = radius
+	mesh.height = length
+	mesh.radial_segments = sides
+	var part := MeshInstance3D.new()
+	part.mesh = mesh
+	part.material_override = material
+	part.position = local_position
+	# Cylinders are built along Y; tip them to lie along the camera's -Z bore axis.
+	part.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+	parent.add_child(part)
 
 
 func _update_orbital_shield(delta: float) -> void:
