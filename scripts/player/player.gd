@@ -136,6 +136,12 @@ func set_spherical_world(center: Vector3, radius: float) -> void:
 	sphere_radius = radius
 
 
+func make_camera_current() -> void:
+	# Hands the viewport back to the player camera when the menu showcase releases it.
+	if camera:
+		camera.current = true
+
+
 func _ready() -> void:
 	camera_base_position = camera.position
 	camera.fov = base_fov

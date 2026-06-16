@@ -21,8 +21,6 @@ var settings_panel: Control
 var settings_rows: VBoxContainer
 var reticle_dot: ColorRect
 var radial_hud: RadialHud
-var tutorial_button_icon: Control
-var tutorial_button_label: Label
 var tutorial_panel: Control
 var tutorial_step_label: Label
 var tutorial_title_label: Label
@@ -257,7 +255,7 @@ func _refresh_menu_title() -> void:
 		"settings":
 			menu_title.text = t("settings")
 		_:
-			menu_title.text = "ORBITAL SWARM"
+			menu_title.text = "ORBITAL HELL"
 
 
 func configure(_manager: GameManager) -> void:
@@ -613,15 +611,18 @@ func _build_menu() -> void:
 	menu_root.mouse_filter = Control.MOUSE_FILTER_STOP
 	root.add_child(menu_root)
 
-	menu_title = _make_label(78)
-	menu_title.text = "ORBITAL SWARM"
+	menu_title = _make_label(98)
+	menu_title.text = "ORBITAL HELL"
 	menu_title.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	menu_title.position.y = 96.0
+	menu_title.position.y = 80.0
 	menu_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	menu_title.add_theme_color_override("font_color", Color(0.82, 0.95, 1.0, 0.98))
-	menu_title.add_theme_color_override("font_shadow_color", Color(0.0, 0.08, 0.16, 0.92))
-	menu_title.add_theme_constant_override("shadow_offset_x", 4)
-	menu_title.add_theme_constant_override("shadow_offset_y", 4)
+	menu_title.add_theme_font_override("font", _make_title_font())
+	menu_title.add_theme_color_override("font_color", Color(0.96, 0.99, 1.0, 1.0))
+	menu_title.add_theme_color_override("font_outline_color", Color(0.0, 0.62, 0.95, 0.9))
+	menu_title.add_theme_constant_override("outline_size", 12)
+	menu_title.add_theme_color_override("font_shadow_color", Color(0.0, 0.05, 0.13, 0.85))
+	menu_title.add_theme_constant_override("shadow_offset_x", 0)
+	menu_title.add_theme_constant_override("shadow_offset_y", 6)
 	menu_root.add_child(menu_title)
 
 	_build_main_menu()
@@ -642,7 +643,7 @@ func _build_main_menu() -> void:
 
 	_add_main_menu_button("play", "_on_play_pressed")
 	_add_main_menu_button("boss_rush", "_on_boss_rush_pressed")
-	_add_main_menu_tutorial_button()
+	_add_main_menu_button("tutorial", "_on_tutorial_pressed")
 	_add_main_menu_button("ranking", "_on_ranking_pressed")
 	_add_main_menu_button("settings", "_on_settings_pressed")
 	_add_main_menu_button("quit", "_on_quit_pressed")
@@ -778,72 +779,6 @@ func _add_main_menu_button(key: String, callback: String) -> void:
 	_loc(button, key)
 
 
-func _add_main_menu_tutorial_button() -> void:
-	# A distinct main-menu entry marked with a generated graduation-cap symbol.
-	var button := _make_menu_button("", 26)
-	button.custom_minimum_size = Vector2(180.0, 92.0)
-	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	button.pressed.connect(Callable(self, "_on_tutorial_pressed"))
-	main_menu_panel.add_child(button)
-
-	var content := VBoxContainer.new()
-	content.set_anchors_preset(Control.PRESET_FULL_RECT)
-	content.alignment = BoxContainer.ALIGNMENT_CENTER
-	content.add_theme_constant_override("separation", 3)
-	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	button.add_child(content)
-
-	tutorial_button_icon = _make_grad_cap_icon()
-	tutorial_button_icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	content.add_child(tutorial_button_icon)
-
-	tutorial_button_label = _make_label(24)
-	tutorial_button_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	tutorial_button_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tutorial_button_label.add_theme_color_override("font_color", Color(0.98, 0.99, 1.0))
-	tutorial_button_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	content.add_child(tutorial_button_label)
-	_loc(tutorial_button_label, "tutorial")
-
-	# Keep the icon and label readable against the light hover background.
-	button.mouse_entered.connect(Callable(self, "_on_tutorial_button_hover").bind(true))
-	button.mouse_exited.connect(Callable(self, "_on_tutorial_button_hover").bind(false))
-
-
-func _on_tutorial_button_hover(hovered: bool) -> void:
-	var color: Color = Color(0.12, 0.22, 0.3) if hovered else Color(0.98, 0.99, 1.0)
-	if tutorial_button_label:
-		tutorial_button_label.add_theme_color_override("font_color", color)
-	if tutorial_button_icon:
-		tutorial_button_icon.modulate = color if hovered else Color(1.0, 1.0, 1.0)
-
-
-func _make_grad_cap_icon() -> Control:
-	var holder := Control.new()
-	holder.custom_minimum_size = Vector2(44.0, 30.0)
-	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var cap_color := Color(0.45, 0.95, 1.0)
-	var base_color := Color(0.26, 0.68, 0.94)
-	var tassel_color := Color(0.94, 1.0, 0.72)
-	var base := Polygon2D.new()
-	base.polygon = PackedVector2Array([Vector2(13.0, 13.0), Vector2(31.0, 13.0), Vector2(28.0, 25.0), Vector2(16.0, 25.0)])
-	base.color = base_color
-	holder.add_child(base)
-	var board := Polygon2D.new()
-	board.polygon = PackedVector2Array([Vector2(22.0, 3.0), Vector2(40.0, 12.0), Vector2(22.0, 21.0), Vector2(4.0, 12.0)])
-	board.color = cap_color
-	holder.add_child(board)
-	var tassel_string := Polygon2D.new()
-	tassel_string.polygon = PackedVector2Array([Vector2(33.0, 12.0), Vector2(35.0, 12.0), Vector2(35.0, 25.0), Vector2(33.0, 25.0)])
-	tassel_string.color = tassel_color
-	holder.add_child(tassel_string)
-	var knob := Polygon2D.new()
-	knob.polygon = PackedVector2Array([Vector2(31.0, 24.0), Vector2(37.0, 24.0), Vector2(37.0, 29.0), Vector2(31.0, 29.0)])
-	knob.color = tassel_color
-	holder.add_child(knob)
-	return holder
-
-
 func _add_pause_menu_button(key: String, callback: String) -> void:
 	var button := _make_menu_button("", 34)
 	button.custom_minimum_size = Vector2(420.0, 74.0)
@@ -874,7 +809,7 @@ func _show_menu_screen(screen: String) -> void:
 	leaderboard_panel.visible = screen == "leaderboard"
 	settings_panel.visible = screen == "settings"
 	if screen == "main":
-		menu_title.text = "ORBITAL SWARM"
+		menu_title.text = "ORBITAL HELL"
 	elif screen == "leaderboard":
 		menu_title.text = t("ranking")
 		_populate_leaderboard()
@@ -1754,6 +1689,18 @@ func tutorial_finished() -> void:
 	ready_label.modulate = Color(0.65, 1.0, 0.95, 1.0)
 	ready_label.text = t("tut_complete")
 	_play_tone(1320.0, 0.18)
+
+
+func _make_title_font() -> FontVariation:
+	# No font ships with the project, so build a punchy display face from the OS fonts
+	# (Bahnschrift / Impact exist on Windows) with extra glyph spacing for the logo look.
+	var system := SystemFont.new()
+	system.font_names = PackedStringArray(["Bahnschrift SemiBold", "Bahnschrift", "Impact", "Arial Black", "Arial"])
+	system.font_weight = 800
+	var variation := FontVariation.new()
+	variation.base_font = system
+	variation.spacing_glyph = 8
+	return variation
 
 
 func _make_label(size := 18) -> Label:

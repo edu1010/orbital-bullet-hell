@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3 uid="uid://b0f3p8x8m3q0h"]
+[gd_scene load_steps=10 format=3 uid="uid://b0f3p8x8m3q0h"]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/game_manager.gd" id="2_manager"]
@@ -8,6 +8,7 @@
 [ext_resource type="Script" path="res://scripts/tutorial_controller.gd" id="6_tutorial"]
 [ext_resource type="Script" path="res://scripts/dragon_boss.gd" id="7_boss"]
 [ext_resource type="Script" path="res://scripts/replay.gd" id="8_replay"]
+[ext_resource type="Script" path="res://scripts/menu_showcase.gd" id="9_showcase"]
 
 [node name="Main" type="Node3D"]
 script = ExtResource("1_main")
@@ -40,6 +41,9 @@ script = ExtResource("7_boss")
 
 [node name="Replay" type="Node3D" parent="."]
 script = ExtResource("8_replay")
+
+[node name="MenuShowcase" type="Node3D" parent="."]
+script = ExtResource("9_showcase")
 
 [node name="Player" parent="." instance=ExtResource("4_player")]
 

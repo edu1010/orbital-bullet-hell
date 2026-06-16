@@ -15,6 +15,7 @@ extends Node3D
 @onready var tutorial: TutorialController = $Tutorial
 @onready var dragon_boss: DragonBoss = $DragonBoss
 @onready var replay: ReplayController = $Replay
+@onready var menu_showcase: MenuShowcase = $MenuShowcase
 
 var boss_controller: BossController
 @onready var player: PlayerController = $Player
@@ -52,6 +53,7 @@ func _ready() -> void:
 	game_manager.replay = replay
 	player.configure(game_manager)
 	ui.configure(game_manager)
+	menu_showcase.configure(game_manager, player, arena)
 	game_manager.show_main_menu()
 
 
