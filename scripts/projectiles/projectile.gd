@@ -56,6 +56,18 @@ func _physics_process(delta: float) -> void:
 		magnet.on_primary_hit(direction)
 		deactivate()
 		return
+	var orb: OverdriveOrb = manager.find_overdrive_orb_hit(global_position, hit_radius)
+	if orb:
+		# The orb reels in and ricochets the shot instead of swallowing it.
+		orb.on_primary_hit(direction)
+		var normal: Vector3 = (global_position - orb.global_position)
+		if normal.length_squared() <= 0.0001:
+			normal = -direction
+		normal = normal.normalized()
+		direction = (direction - 2.0 * direction.dot(normal) * normal).normalized()
+		global_position = orb.global_position + normal * (orb.body_radius + hit_radius + 0.1)
+		look_at(global_position + direction, Vector3.UP)
+		return
 	var enemy: EnemyBase = manager.find_enemy_hit(global_position, hit_radius, true)
 	if enemy:
 		if enemy is BombEnemy:

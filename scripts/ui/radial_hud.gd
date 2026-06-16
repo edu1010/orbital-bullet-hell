@@ -81,7 +81,7 @@ func _draw() -> void:
 	var hp_max: float = max(0.001, float(state.get("max_hp", 3.0)))
 	var hp_fraction: float = clamp(hp / hp_max, 0.0, 1.0)
 	var hp_color: Color = Color(0.35, 1.0, 0.45).lerp(Color(1.0, 0.22, 0.16), 1.0 - hp_fraction)
-	if bool(state.get("invulnerable", false)) and int(Time.get_ticks_msec() / 90) % 2 == 0:
+	if bool(state.get("invulnerable", false)) and int(Time.get_ticks_msec() / 90.0) % 2 == 0:
 		hp_color = Color(1.0, 0.9, 0.9)
 	_draw_gauge(center, -PI * 0.5, hp_fraction, hp_color, hp_fraction <= 0.34, false)
 
@@ -104,7 +104,7 @@ func _draw() -> void:
 		_draw_damage(center, float(mark["angle"]), 1.0 - float(mark["time"]) / float(mark["max"]))
 
 
-func _draw_gauge(center: Vector2, center_angle: float, fraction: float, color: Color, ready: bool, active: bool, pulse: float = 0.0) -> void:
+func _draw_gauge(center: Vector2, center_angle: float, fraction: float, color: Color, is_ready: bool, active: bool, pulse: float = 0.0) -> void:
 	var start_angle: float = center_angle - GAUGE_SPAN * 0.5
 	var end_angle: float = center_angle + GAUGE_SPAN * 0.5
 	draw_arc(center, GAUGE_RADIUS, start_angle, end_angle, GAUGE_SEGMENTS, Color(0.08, 0.11, 0.16, 0.66), GAUGE_WIDTH, true)
@@ -115,7 +115,7 @@ func _draw_gauge(center: Vector2, center_angle: float, fraction: float, color: C
 	if active:
 		fill_color = color.lerp(Color(1.0, 1.0, 1.0), 0.45)
 		width = GAUGE_WIDTH + 2.0
-	elif ready:
+	elif is_ready:
 		fill_color = color.lerp(Color(1.0, 1.0, 1.0), 0.25 + pulse * 0.45)
 		width = GAUGE_WIDTH + pulse * 1.6
 	var fill_end: float = start_angle + fraction * (end_angle - start_angle)

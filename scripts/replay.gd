@@ -124,7 +124,7 @@ func _capture_frame() -> void:
 
 
 func _capture_boss() -> Variant:
-	var boss: DragonBoss = manager.boss
+	var boss: DragonBoss = manager.boss.get_active_dragon() if manager.boss else null
 	if not boss or not boss.is_active():
 		return null
 	var weak: Array = []
@@ -344,8 +344,8 @@ func _update_boss_ghost(snap: Dictionary) -> void:
 			x_axis = y_axis.cross(Vector3.RIGHT)
 		x_axis = x_axis.normalized()
 		var z_axis: Vector3 = x_axis.cross(y_axis).normalized()
-		var basis := Basis(x_axis, y_axis, z_axis).scaled(Vector3(0.7, lrange, 0.7))
-		boss_laser_ghost.global_transform = Transform3D(basis, lstart + laim * lrange * 0.5)
+		var beam_basis := Basis(x_axis, y_axis, z_axis).scaled(Vector3(0.7, lrange, 0.7))
+		boss_laser_ghost.global_transform = Transform3D(beam_basis, lstart + laim * lrange * 0.5)
 	else:
 		boss_laser_ghost.visible = false
 

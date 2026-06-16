@@ -90,6 +90,7 @@ var jump_buffer_timer := 0.0
 var coyote_timer := 0.0
 var jumps_remaining := 1
 var fire_timer := 0.0
+var overdrive_timer := 0.0
 var pitch := 0.0
 var fov_kick := 0.0
 var shake_timer := 0.0
@@ -159,6 +160,7 @@ func reset_for_run(start_position: Vector3) -> void:
 	orbital_shield_timer = 0.0
 	boost_timer = 0.0
 	invulnerability_timer = 0.0
+	overdrive_timer = 0.0
 	jump_buffer_timer = 0.0
 	coyote_timer = coyote_time
 	jumps_remaining = double_jump_count
@@ -249,6 +251,7 @@ func _process(delta: float) -> void:
 
 func _update_timers(delta: float) -> void:
 	invulnerability_timer = max(0.0, invulnerability_timer - delta)
+	overdrive_timer = max(0.0, overdrive_timer - delta)
 	jump_buffer_timer = max(0.0, jump_buffer_timer - delta)
 	if _is_grounded():
 		coyote_timer = coyote_time
@@ -366,9 +369,10 @@ func _update_enemy_platform() -> void:
 
 func _update_auto_fire(delta: float) -> void:
 	fire_timer += delta
-	var interval := 1.0 / primary_fire_rate
+	var rate: float = primary_fire_rate * (2.0 if overdrive_timer > 0.0 else 1.0)
+	var interval := 1.0 / rate
 	var shots := 0
-	while fire_timer >= interval and shots < 3:
+	while fire_timer >= interval and shots < 6:
 		fire_timer -= interval
 		shots += 1
 		_fire_primary()
@@ -485,6 +489,17 @@ func refill_all_charges() -> void:
 	boost_ready_cue_played = true
 
 
+func apply_overdrive(duration: float) -> void:
+	# Doubles the primary fire rate for a while (see _update_auto_fire).
+	overdrive_timer = max(overdrive_timer, duration)
+	fov_kick = max(fov_kick, 14.0)
+	add_camera_shake(0.22, 0.16)
+
+
+func is_overdrive_active() -> bool:
+	return overdrive_timer > 0.0
+
+
 func add_kill_charge(source: String, current_combo: float) -> void:
 	var gain: float = kill_charge_bonus
 	var boost_gain: float = boost_kill_charge_bonus
@@ -578,18 +593,18 @@ func _create_weapon_viewmodel() -> void:
 	weapon_root.rotation_degrees = Vector3(3.0, 8.0, 0.0)
 	camera.add_child(weapon_root)
 
-	var tan: StandardMaterial3D = _make_weapon_material(Color(0.62, 0.55, 0.42), Color(0.3, 0.25, 0.16), 0.28)
+	var tan_mat: StandardMaterial3D = _make_weapon_material(Color(0.62, 0.55, 0.42), Color(0.3, 0.25, 0.16), 0.28)
 	var tan_dark: StandardMaterial3D = _make_weapon_material(Color(0.42, 0.37, 0.28), Color(0.18, 0.15, 0.1), 0.2)
 	var dark_metal: StandardMaterial3D = _make_weapon_material(Color(0.12, 0.11, 0.1), Color(0.06, 0.05, 0.04), 0.12)
 	var brass: StandardMaterial3D = _make_weapon_material(Color(0.66, 0.5, 0.2), Color(0.6, 0.42, 0.12), 0.8)
 	var muzzle_glow: StandardMaterial3D = _make_weapon_material(Color(1.0, 0.66, 0.3), Color(1.0, 0.55, 0.2), 2.6)
 
 	# Rear housing / receiver and the motor block, plus grip and ammo drum.
-	_add_weapon_box(weapon_root, tan, Vector3(0.2, 0.19, 0.26), Vector3(0.0, 0.0, 0.12))
+	_add_weapon_box(weapon_root, tan_mat, Vector3(0.2, 0.19, 0.26), Vector3(0.0, 0.0, 0.12))
 	_add_weapon_box(weapon_root, dark_metal, Vector3(0.07, 0.18, 0.12), Vector3(0.0, -0.16, 0.16), Vector3(16.0, 0.0, 0.0))
 	_add_weapon_box(weapon_root, tan_dark, Vector3(0.17, 0.17, 0.14), Vector3(-0.16, -0.04, 0.14))
 	_add_weapon_box(weapon_root, brass, Vector3(0.03, 0.03, 0.16), Vector3(-0.05, 0.02, 0.1), Vector3(0.0, 0.0, 26.0))
-	_add_weapon_cylinder(weapon_root, tan, 0.11, 0.16, 6, Vector3(0.0, 0.0, -0.02))
+	_add_weapon_cylinder(weapon_root, tan_mat, 0.11, 0.16, 6, Vector3(0.0, 0.0, -0.02))
 
 	# Spinning barrel assembly mounted on the bore axis.
 	weapon_spin = Node3D.new()
@@ -602,10 +617,10 @@ func _create_weapon_viewmodel() -> void:
 	for i in range(6):
 		var barrel_angle: float = TAU * float(i) / 6.0
 		var ring_offset: Vector3 = Vector3(cos(barrel_angle), sin(barrel_angle), 0.0) * 0.066
-		var barrel_material: StandardMaterial3D = tan if i % 2 == 0 else tan_dark
+		var barrel_material: StandardMaterial3D = tan_mat if i % 2 == 0 else tan_dark
 		_add_weapon_cylinder(weapon_spin, barrel_material, 0.024, 0.62, 6, ring_offset + Vector3(0.0, 0.0, -0.32))
 	# Front hub disc (added last = drawn over the barrels from the player's view).
-	_add_weapon_cylinder(weapon_spin, tan, 0.092, 0.05, 6, Vector3(0.0, 0.0, -0.62))
+	_add_weapon_cylinder(weapon_spin, tan_mat, 0.092, 0.05, 6, Vector3(0.0, 0.0, -0.62))
 
 	# Muzzle marker (bullet origin) and a flash that pulses on every shot.
 	weapon_muzzle = Marker3D.new()

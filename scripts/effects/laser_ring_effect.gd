@@ -24,7 +24,7 @@ func _ready() -> void:
 
 
 func activate(
-	position: Vector3,
+	spawn_position: Vector3,
 	direction: Vector3,
 	_start_radius: float,
 	_end_radius: float,
@@ -33,7 +33,7 @@ func activate(
 	width_hint: float = -1.0,
 	width_scale: float = -1.0
 ) -> void:
-	global_position = position
+	global_position = spawn_position
 	start_radius = _start_radius
 	end_radius = _end_radius
 	ring_color = color

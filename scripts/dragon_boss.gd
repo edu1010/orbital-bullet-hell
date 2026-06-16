@@ -289,7 +289,7 @@ func _weak_point_anchor(weak_point: Dictionary) -> Vector3:
 		"head":
 			return head_position
 		"mid":
-			return _trail_point(int(body_size / 2) * slot_spacing)
+			return _trail_point(int(body_size / 2.0) * slot_spacing)
 		_:
 			return _trail_point(body_size * slot_spacing)
 
@@ -382,8 +382,8 @@ func _update_laser_visual(width: float, length: float) -> void:
 		x_axis = y_axis.cross(Vector3.RIGHT)
 	x_axis = x_axis.normalized()
 	var z_axis: Vector3 = x_axis.cross(y_axis).normalized()
-	var basis := Basis(x_axis, y_axis, z_axis).scaled(Vector3(width, beam_length, width))
-	laser_mesh.global_transform = Transform3D(basis, origin + aim_dir * beam_length * 0.5)
+	var beam_basis := Basis(x_axis, y_axis, z_axis).scaled(Vector3(width, beam_length, width))
+	laser_mesh.global_transform = Transform3D(beam_basis, origin + aim_dir * beam_length * 0.5)
 
 
 func _beam_length_to_wall() -> float:

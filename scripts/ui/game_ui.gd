@@ -38,6 +38,7 @@ var ready_label: Label
 var boss_bar_root: Control
 var boss_bar_fill: ColorRect
 var boss_bar_label: Label
+var boss_rush_label: Label
 var gameover_buttons: HBoxContainer
 var gameover_replay_button: Button
 var replay_panel: Control
@@ -88,6 +89,7 @@ var localized_controls: Array = []
 
 const STRINGS := {
 	"play": {"en": "PLAY", "es": "JUGAR"},
+	"boss_rush": {"en": "BOSS RUSH", "es": "ASALTO DE JEFES"},
 	"tutorial": {"en": "TUTORIAL", "es": "TUTORIAL"},
 	"ranking": {"en": "RANKING", "es": "CLASIFICACIÓN"},
 	"settings": {"en": "SETTINGS", "es": "AJUSTES"},
@@ -163,6 +165,11 @@ const STRINGS := {
 	"tut_hint": {"en": "[ESC] exit     ·     [N] skip step", "es": "[ESC] salir     ·     [N] saltar paso"},
 	"boss_incoming": {"en": "DRAGON INCOMING", "es": "¡DRAGÓN A LA VISTA!"},
 	"boss_defeated": {"en": "DRAGON DEFEATED", "es": "¡DRAGÓN DERROTADO!"},
+	"boss_incoming_cube": {"en": "CUBE INCOMING", "es": "¡CUBO A LA VISTA!"},
+	"boss_defeated_cube": {"en": "CUBE DEFEATED", "es": "¡CUBO DERROTADO!"},
+	"boss_incoming_butterfly": {"en": "BUTTERFLY INCOMING", "es": "¡MARIPOSA A LA VISTA!"},
+	"boss_defeated_butterfly": {"en": "BUTTERFLY DEFEATED", "es": "¡MARIPOSA DERROTADA!"},
+	"boss_rush_round": {"en": "NORMAL ROUND", "es": "RONDA NORMAL"},
 	"replay": {"en": "REPLAY", "es": "REPETICIÓN"},
 	"restart": {"en": "RESTART", "es": "REINTENTAR"},
 	"to_menu": {"en": "MENU", "es": "MENÚ"},
@@ -279,8 +286,8 @@ func _process(delta: float) -> void:
 		if vignette_timer > 0.0:
 			vignette_timer -= delta
 			# Ease-out so the edges punch in instantly then linger and fade.
-			var t: float = clamp(vignette_timer / vignette_duration, 0.0, 1.0)
-			vignette_intensity = (1.0 - pow(1.0 - t, 2.0)) * 0.85 + t * 0.15
+			var fade: float = clamp(vignette_timer / vignette_duration, 0.0, 1.0)
+			vignette_intensity = (1.0 - pow(1.0 - fade, 2.0)) * 0.85 + fade * 0.15
 			var pulse: float = 0.85 + sin(float(Time.get_ticks_msec()) / 90.0) * 0.15
 			vignette_intensity *= pulse
 		vignette_material.set_shader_parameter("intensity", vignette_intensity)
@@ -323,6 +330,11 @@ func update_hud(data: Dictionary) -> void:
 	if radial_hud:
 		radial_hud.set_state(data)
 	set_boss_health(bool(data.get("boss_active", false)), float(data.get("boss_health", 0.0)))
+	if boss_rush_label:
+		var round_active: bool = bool(data.get("round_active", false))
+		boss_rush_label.visible = round_active
+		if round_active:
+			boss_rush_label.text = "%s   %s" % [t("boss_rush_round"), _format_time(float(data.get("round_time", 0.0)))]
 
 
 func show_state(state: int) -> void:
@@ -364,9 +376,9 @@ func show_state(state: int) -> void:
 	_refresh_reticle()
 
 
-func show_start_controls_hint(visible: bool) -> void:
-	start_hint_requested = visible and start_hint_enabled
-	if visible:
+func show_start_controls_hint(is_visible: bool) -> void:
+	start_hint_requested = is_visible and start_hint_enabled
+	if is_visible:
 		start_hint_timer = 0.0
 	_refresh_start_controls_hint()
 
@@ -629,6 +641,7 @@ func _build_main_menu() -> void:
 	menu_root.add_child(main_menu_panel)
 
 	_add_main_menu_button("play", "_on_play_pressed")
+	_add_main_menu_button("boss_rush", "_on_boss_rush_pressed")
 	_add_main_menu_tutorial_button()
 	_add_main_menu_button("ranking", "_on_ranking_pressed")
 	_add_main_menu_button("settings", "_on_settings_pressed")
@@ -878,6 +891,11 @@ func _hide_menu() -> void:
 func _on_play_pressed() -> void:
 	if manager:
 		manager.start_run()
+
+
+func _on_boss_rush_pressed() -> void:
+	if manager:
+		manager.start_boss_rush()
 
 
 func _on_tutorial_pressed() -> void:
@@ -1456,7 +1474,7 @@ func _build_boss_bar() -> void:
 	root.add_child(boss_bar_root)
 
 	boss_bar_label = _make_label(20)
-	boss_bar_label.text = "- - -   DRAGON   - - -"
+	boss_bar_label.text = "- - -   BOSS   - - -"
 	boss_bar_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	boss_bar_label.anchor_left = 0.5
 	boss_bar_label.anchor_right = 0.5
@@ -1489,6 +1507,17 @@ func _build_boss_bar() -> void:
 	boss_bar_fill.color = Color(0.95, 0.18, 0.14, 0.95)
 	boss_bar_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	frame.add_child(boss_bar_fill)
+
+	# Boss Rush interlude countdown, shown top-centre during normal-enemy rounds.
+	boss_rush_label = _make_label(26)
+	boss_rush_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	boss_rush_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	boss_rush_label.offset_top = 78.0
+	boss_rush_label.z_index = 19
+	boss_rush_label.visible = false
+	boss_rush_label.add_theme_color_override("font_color", Color(0.6, 1.0, 0.7))
+	boss_rush_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(boss_rush_label)
 
 
 func _build_gameover_buttons() -> void:
@@ -1739,7 +1768,7 @@ func _make_label(size := 18) -> Label:
 
 func _format_time(seconds: float) -> String:
 	var total := int(seconds)
-	return "%02d:%02d" % [int(total / 60), total % 60]
+	return "%02d:%02d" % [int(total / 60.0), total % 60]
 
 
 func _play_tone(frequency: float, duration: float) -> void:

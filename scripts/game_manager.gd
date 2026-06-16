@@ -24,6 +24,8 @@ enum RunState { MENU, PLAYING, PAUSED, GAME_OVER, TUTORIAL, REPLAY }
 @export var bomb_pool_initial := 24
 @export var max_active_reflectors := 18
 @export var max_active_score_magnets := 6
+@export var max_active_overdrive_orbs := 2
+@export var overdrive_orb_pool_initial := 2
 
 @export_group("Scoring")
 @export var shard_base_value := 5
@@ -53,6 +55,7 @@ const LASER_BEAM_SCENE := preload("res://scenes/effects/LaserBeamEffect.tscn")
 const LASER_RING_SCENE := preload("res://scenes/effects/LaserRingEffect.tscn")
 const HEAL_REFLECTOR_SCENE := preload("res://scenes/pickups/HealReflector.tscn")
 const SCORE_MAGNET_SCENE := preload("res://scenes/pickups/ScoreMagnet.tscn")
+const OVERDRIVE_ORB_SCENE := preload("res://scenes/pickups/OverdriveOrb.tscn")
 const ENEMY_SCENES := {
 	"swarmer": preload("res://scenes/enemies/Swarmer.tscn"),
 	"charger": preload("res://scenes/enemies/Charger.tscn"),
@@ -71,7 +74,7 @@ var player: PlayerController
 var spawn_manager: SpawnManager
 var ui: GameUI
 var tutorial: TutorialController
-var boss: DragonBoss
+var boss: BossController
 var replay: ReplayController
 var enemies_container: Node3D
 var projectiles_container: Node3D
@@ -87,11 +90,13 @@ var laser_beam_pool: Array[LaserBeamEffect] = []
 var laser_ring_pool: Array[LaserRingEffect] = []
 var heal_reflector_pool: Array[HealReflector] = []
 var score_magnet_pool: Array[ScoreMagnet] = []
+var overdrive_orb_pool: Array[OverdriveOrb] = []
 var active_enemies: Array[EnemyBase] = []
 var active_projectiles: Array[PlayerProjectile] = []
 var active_shards: Array[ScoreShard] = []
 var active_reflectors: Array[HealReflector] = []
 var active_score_magnets: Array[ScoreMagnet] = []
+var active_overdrive_orbs: Array[OverdriveOrb] = []
 var active_heal_waves: Array[Dictionary] = []
 var kills_this_run := 0
 var kills_in_sample := 0
@@ -108,6 +113,7 @@ var warn_distance := 0.0
 var warn_is_bomb := false
 var boss_score_threshold := 40000
 var boss_started := false
+var game_mode := "normal"
 
 
 func configure(
@@ -186,11 +192,24 @@ func show_main_menu() -> void:
 
 
 func start_run() -> void:
+	_begin_run("normal")
+
+
+func start_boss_rush() -> void:
+	_begin_run("boss_rush")
+
+
+func is_boss_rush() -> bool:
+	return game_mode == "boss_rush"
+
+
+func _begin_run(mode: String) -> void:
 	if not player:
 		return
 	Engine.time_scale = 1.0
 	# Pools stay allocated across runs; only active objects are hidden/reset.
 	_deactivate_all()
+	game_mode = mode
 	score = 0
 	next_power_surge_score = maxi(1, score_milestone_step)
 	power_surge_end_msec = 0
@@ -205,7 +224,7 @@ func start_run() -> void:
 	score_magnets_collected = 0
 	boss_started = false
 	if boss:
-		boss.stop()
+		boss.reset_for_run(mode)
 	state = RunState.PLAYING
 	if replay:
 		replay.begin_recording()
@@ -366,6 +385,7 @@ func _setup_pools() -> void:
 	_prewarm_pool(laser_ring_pool, LASER_RING_SCENE, effects_container, laser_ring_pool_initial)
 	_prewarm_pool(heal_reflector_pool, HEAL_REFLECTOR_SCENE, reflectors_container, heal_reflector_pool_initial)
 	_prewarm_pool(score_magnet_pool, SCORE_MAGNET_SCENE, reflectors_container, score_magnet_pool_initial)
+	_prewarm_pool(overdrive_orb_pool, OVERDRIVE_ORB_SCENE, reflectors_container, overdrive_orb_pool_initial)
 
 
 func _prewarm_enemy_pool(enemy_type: String, count: int) -> void:
@@ -421,11 +441,14 @@ func _deactivate_all() -> void:
 		reflector.deactivate()
 	for magnet in score_magnet_pool:
 		magnet.deactivate()
+	for orb in overdrive_orb_pool:
+		orb.deactivate()
 	active_enemies.clear()
 	active_projectiles.clear()
 	active_shards.clear()
 	active_reflectors.clear()
 	active_score_magnets.clear()
+	active_overdrive_orbs.clear()
 	active_heal_waves.clear()
 
 
@@ -581,6 +604,18 @@ func spawn_score_magnet(spawn_position: Vector3) -> ScoreMagnet:
 	return magnet
 
 
+func spawn_overdrive_orb(spawn_position: Vector3) -> OverdriveOrb:
+	if active_overdrive_orb_count() >= max_active_overdrive_orbs:
+		return null
+	var orb: OverdriveOrb = _get_from_pool(overdrive_orb_pool, OVERDRIVE_ORB_SCENE, reflectors_container, max_active_overdrive_orbs) as OverdriveOrb
+	if not orb:
+		return null
+	orb.activate(self, player, spawn_position)
+	if not active_overdrive_orbs.has(orb):
+		active_overdrive_orbs.append(orb)
+	return orb
+
+
 func on_enemy_killed(enemy: EnemyBase, source: String, spawn_pickups: bool = true) -> void:
 	# Kills feed score, combo, shards, and extra-shot charge from one place.
 	kills_this_run += 1
@@ -629,10 +664,12 @@ func _add_score(amount: int) -> void:
 	if amount <= 0:
 		return
 	score += amount
-	if not boss_started and boss and state == RunState.PLAYING and score >= boss_score_threshold:
-		boss_started = true
-		boss.start()
-	var step: int = maxi(1, score_milestone_step)
+	# Boss waves are driven by the BossController, which watches the score itself.
+	# The gap to the next power surge scales with the current combo: a high multiplier
+	# rakes in score far faster (and the surge's slow-mo makes scoring easier still),
+	# so the score needed for the next surge rises in lockstep with the combo. At x12
+	# the gap is the base step x12, keeping surges roughly as rare as at x1.
+	var step: int = maxi(1, int(round(float(score_milestone_step) * combo)))
 	if next_power_surge_score <= 0:
 		next_power_surge_score = step
 	var should_activate := false
@@ -702,6 +739,16 @@ func find_score_magnet_hit(position: Vector3, radius: float) -> ScoreMagnet:
 		var hit_radius: float = radius + magnet.body_radius
 		if magnet.global_position.distance_squared_to(position) <= hit_radius * hit_radius:
 			return magnet
+	return null
+
+
+func find_overdrive_orb_hit(position: Vector3, radius: float) -> OverdriveOrb:
+	for orb in active_overdrive_orbs:
+		if not orb.active:
+			continue
+		var hit_radius: float = radius + orb.body_radius
+		if orb.global_position.distance_squared_to(position) <= hit_radius * hit_radius:
+			return orb
 	return null
 
 
@@ -777,6 +824,19 @@ func perform_extra_shot(origin: Vector3, direction: Vector3, beam_radius: float,
 		var magnet_radius: float = beam_radius + magnet.body_radius + (magnet_forward / beam_range) * beam_radius * 0.45
 		if magnet_distance <= magnet_radius:
 			magnet.on_extra_hit(direction)
+	var orb_snapshot: Array = active_overdrive_orbs.duplicate()
+	for raw_orb in orb_snapshot:
+		var orb: OverdriveOrb = raw_orb as OverdriveOrb
+		if not orb or not orb.active:
+			continue
+		var to_orb: Vector3 = orb.global_position - origin
+		var orb_forward: float = to_orb.dot(direction)
+		if orb_forward < -1.0 or orb_forward > beam_range:
+			continue
+		var orb_closest: Vector3 = origin + direction * orb_forward
+		var orb_radius: float = beam_radius + orb.body_radius + (orb_forward / beam_range) * beam_radius * 0.45
+		if orb.global_position.distance_to(orb_closest) <= orb_radius:
+			orb.on_extra_hit()
 	if boss and boss.is_active():
 		boss.try_beam_hit(origin, direction, beam_radius, beam_range)
 	if player:
@@ -862,7 +922,7 @@ func _spawn_extra_laser_visual(origin: Vector3, direction: Vector3, beam_radius:
 	spawn_burst(origin + direction * beam_range, Color(0.25, 0.75, 1.0), beam_radius * 1.55, 0.36)
 
 
-func detonate_bomb(bomb: BombEnemy, source: String = "bomb") -> int:
+func detonate_bomb(bomb: BombEnemy, _source: String = "bomb") -> int:
 	if not bomb or not bomb.active:
 		return 0
 	# Bomb kills score normally but consolidate shard output into one large burst.
@@ -919,6 +979,14 @@ func active_score_magnet_count() -> int:
 	var count := 0
 	for magnet in active_score_magnets:
 		if magnet.active:
+			count += 1
+	return count
+
+
+func active_overdrive_orb_count() -> int:
+	var count := 0
+	for orb in active_overdrive_orbs:
+		if orb.active:
 			count += 1
 	return count
 
@@ -1008,6 +1076,8 @@ func _update_ui() -> void:
 		"warn_radius": enemy_warn_radius,
 		"boss_active": boss != null and boss.is_active(),
 		"boss_health": boss.health_fraction() if boss else 0.0,
+		"round_active": boss != null and boss.is_round_active(),
+		"round_time": boss.round_time_left() if boss else 0.0,
 	})
 
 

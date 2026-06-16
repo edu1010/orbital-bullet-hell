@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://xi827n4s8vcc"]
+
+[ext_resource type="Script" path="res://scripts/pickups/overdrive_orb.gd" id="1_orb"]
+
+[node name="OverdriveOrb" type="Node3D"]
+script = ExtResource("1_orb")

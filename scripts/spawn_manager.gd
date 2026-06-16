@@ -41,11 +41,18 @@ extends Node
 @export var reflector_height_min := 7.0
 @export var reflector_height_max := 24.0
 
+@export_group("Overdrive Orb")
+@export var orb_spawn_interval := 42.0
+@export var orb_spawn_interval_min := 26.0
+@export var orb_height_min := 8.0
+@export var orb_height_max := 22.0
+
 var manager: GameManager
 var player: PlayerController
 var spawn_credit: float = 0.0
 var bomb_timer: float = 0.0
 var reflector_timer: float = 0.0
+var orb_timer: float = 0.0
 
 
 func configure(_manager: GameManager, _player: PlayerController) -> void:
@@ -57,6 +64,7 @@ func reset_for_run() -> void:
 	spawn_credit = 0.0
 	bomb_timer = 4.5
 	reflector_timer = 6.0
+	orb_timer = orb_spawn_interval
 
 
 func _process(delta: float) -> void:
@@ -65,11 +73,15 @@ func _process(delta: float) -> void:
 	# The tutorial drives its own controlled spawns; automatic pressure stays off.
 	if manager.is_tutorial():
 		return
-	# During the dragon boss the boss owns the whole enemy population (its body).
+	# During a boss the boss owns the whole enemy population (its body).
 	if manager.boss and manager.boss.is_active():
+		return
+	# In Boss Rush, normal enemies only appear during a timed interlude round.
+	if manager.is_boss_rush() and not (manager.boss and manager.boss.boss_rush_spawns_allowed()):
 		return
 	bomb_timer -= delta
 	reflector_timer -= delta
+	orb_timer -= delta
 	_update_enemy_spawning(delta)
 	if bomb_timer <= 0.0:
 		_spawn_bomb()
@@ -79,6 +91,10 @@ func _process(delta: float) -> void:
 		_spawn_heal_reflector()
 		var reflector_pressure: float = 1.0 + manager.survival_time * 0.012 + float(manager.score) * 0.000006
 		reflector_timer = max(reflector_spawn_interval_min, reflector_spawn_interval / reflector_pressure)
+	if orb_timer <= 0.0:
+		_spawn_overdrive_orb()
+		var orb_pressure: float = 1.0 + manager.survival_time * 0.004
+		orb_timer = max(orb_spawn_interval_min, orb_spawn_interval / orb_pressure)
 
 
 func _update_enemy_spawning(delta: float) -> void:
@@ -125,6 +141,11 @@ func _spawn_bomb() -> void:
 func _spawn_heal_reflector() -> void:
 	var position: Vector3 = _pick_spawn_position(randf_range(reflector_height_min, reflector_height_max))
 	manager.spawn_heal_reflector(position)
+
+
+func _spawn_overdrive_orb() -> void:
+	var position: Vector3 = _pick_spawn_position(randf_range(orb_height_min, orb_height_max))
+	manager.spawn_overdrive_orb(position)
 
 
 func _pick_enemy_type() -> String:
