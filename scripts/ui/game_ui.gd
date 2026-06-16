@@ -1494,7 +1494,7 @@ func _on_replay_pressed() -> void:
 
 func _on_restart_pressed() -> void:
 	if manager:
-		manager.start_run()
+		manager.restart_run()
 
 
 func _build_replay_ui() -> void:

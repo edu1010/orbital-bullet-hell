@@ -199,6 +199,11 @@ func start_boss_rush() -> void:
 	_begin_run("boss_rush")
 
 
+func restart_run() -> void:
+	# Retry from game over in whatever mode was being played, not always normal.
+	_begin_run(game_mode)
+
+
 func is_boss_rush() -> bool:
 	return game_mode == "boss_rush"
 
@@ -345,7 +350,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			else:
 				toggle_pause()
 		elif state == RunState.GAME_OVER and event.keycode == KEY_R:
-			start_run()
+			restart_run()
 		elif state == RunState.MENU and (event.keycode == KEY_SPACE or event.keycode == KEY_ENTER):
 			if not ui or ui.is_main_menu_screen():
 				start_run()
