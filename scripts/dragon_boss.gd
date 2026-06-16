@@ -382,7 +382,10 @@ func _update_laser_visual(width: float, length: float) -> void:
 		x_axis = y_axis.cross(Vector3.RIGHT)
 	x_axis = x_axis.normalized()
 	var z_axis: Vector3 = x_axis.cross(y_axis).normalized()
-	var beam_basis := Basis(x_axis, y_axis, z_axis).scaled(Vector3(width, beam_length, width))
+	# Scale the local axes directly (cylinder height runs along local Y = aim_dir).
+	# Basis(...).scaled() premultiplies, scaling in WORLD axes, which shears a beam
+	# aimed off the vertical into a streak along world up; bake the scale into the columns.
+	var beam_basis := Basis(x_axis * width, y_axis * beam_length, z_axis * width)
 	laser_mesh.global_transform = Transform3D(beam_basis, origin + aim_dir * beam_length * 0.5)
 
 

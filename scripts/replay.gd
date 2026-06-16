@@ -344,7 +344,9 @@ func _update_boss_ghost(snap: Dictionary) -> void:
 			x_axis = y_axis.cross(Vector3.RIGHT)
 		x_axis = x_axis.normalized()
 		var z_axis: Vector3 = x_axis.cross(y_axis).normalized()
-		var beam_basis := Basis(x_axis, y_axis, z_axis).scaled(Vector3(0.7, lrange, 0.7))
+		# Scale local axes directly (see dragon_boss._update_laser_visual): Basis.scaled()
+		# premultiplies in WORLD axes and shears an off-vertical beam into a vertical streak.
+		var beam_basis := Basis(x_axis * 0.7, y_axis * lrange, z_axis * 0.7)
 		boss_laser_ghost.global_transform = Transform3D(beam_basis, lstart + laim * lrange * 0.5)
 	else:
 		boss_laser_ghost.visible = false
