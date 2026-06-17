@@ -43,9 +43,9 @@ func _ready() -> void:
 	ui_pointer.set_script(VR_POINTER)
 	right_hand.add_child(ui_pointer)
 
-	# Salto con A/X en cualquiera de las dos manos.
-	left_hand.connect("button_pressed", _on_hand_button)
-	right_hand.connect("button_pressed", _on_hand_button)
+	# Botones de las manos (el 2º argumento identifica qué mano).
+	left_hand.connect("button_pressed", _on_hand_button.bind("left"))
+	right_hand.connect("button_pressed", _on_hand_button.bind("right"))
 
 
 func _make_controller(node_name: String, tracker: String) -> XRController3D:
@@ -87,8 +87,35 @@ func _process(delta: float) -> void:
 		ui_pointer.visible = not (manager.has_method("is_playing") and manager.is_playing())
 
 
-func _on_hand_button(action_name: String) -> void:
-	if action_name != jump_action:
+func _on_hand_button(action_name: String, hand: String) -> void:
+	if manager == null:
 		return
-	if manager and manager.player and manager.player.has_method("vr_jump"):
-		manager.player.vr_jump()
+	var playing: bool = manager.has_method("is_playing") and manager.is_playing()
+
+	# --- En el MENÚ (hasta tener el menú 2D en 3D): arrancar con el gatillo ---
+	# Gatillo derecho = partida normal, gatillo izquierdo = boss rush.
+	if not playing:
+		if action_name == "trigger_click":
+			if hand == "left" and manager.has_method("start_boss_rush"):
+				manager.start_boss_rush()
+			elif manager.has_method("start_run"):
+				manager.start_run()
+		return
+
+	# --- En PARTIDA: acciones del jugador ---
+	var player = manager.player
+	if player == null:
+		return
+	match action_name:
+		jump_action:
+			if player.has_method("vr_jump"):
+				player.vr_jump()
+		"trigger_click":
+			# Gatillo derecho = disparo extra; izquierdo = escudo orbital.
+			if hand == "right" and player.has_method("try_fire_extra"):
+				player.try_fire_extra()
+			elif hand == "left" and player.has_method("try_fire_orbital_shield"):
+				player.try_fire_orbital_shield()
+		"grip_click":
+			if player.has_method("try_boost"):
+				player.try_boost()
