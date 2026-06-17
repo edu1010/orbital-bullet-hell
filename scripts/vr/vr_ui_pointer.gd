@@ -50,7 +50,12 @@ func _make_beam() -> MeshInstance3D:
 
 func _process(_delta: float) -> void:
 	if ray and ray.is_colliding():
-		_set_beam_length(global_position.distance_to(ray.get_collision_point()))
+		var point: Vector3 = ray.get_collision_point()
+		_set_beam_length(global_position.distance_to(point))
+		# Mueve el "ratón" sobre el panel para resaltar el botón apuntado.
+		var collider := ray.get_collider()
+		if collider and collider.is_in_group("vr_ui") and collider.has_method("vr_hover"):
+			collider.vr_hover(point)
 	else:
 		_set_beam_length(RAY_LENGTH)
 

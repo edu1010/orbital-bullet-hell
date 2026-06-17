@@ -12,6 +12,7 @@ extends Node
 signal xr_state_changed(active: bool)
 
 const VR_RIG := preload("res://scripts/vr/vr_rig.gd")
+const VR_UI_PANEL := preload("res://scripts/vr/vr_ui_panel.gd")
 
 var xr_interface: XRInterface = null
 var xr_active := false
@@ -58,6 +59,21 @@ func _attach_rig() -> void:
 	else:
 		scene.add_child(rig)
 	print("[VR] Rig VR montado.")
+
+	# Panel 3D con el MENÚ del juego (la GameUI 2D metida en un SubViewport).
+	var ui_node: Node = null
+	if mgr and "ui" in mgr:
+		ui_node = mgr.ui
+	if ui_node == null:
+		ui_node = scene.get_node_or_null("UI")
+	if ui_node:
+		var panel := VR_UI_PANEL.new()
+		panel.name = "VRUIPanel"
+		panel.position = Vector3(0.0, 1.3, -1.4)  # frente al jugador, a la altura de la vista
+		rig.add_child(panel)
+		panel.call("host_ui", ui_node)
+		rig.set("ui_panel", panel)
+		print("[VR] Menú 3D montado.")
 
 func is_active() -> bool:
 	return xr_active

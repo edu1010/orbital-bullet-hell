@@ -619,7 +619,16 @@ func _create_weapon_viewmodel() -> void:
 	weapon_root.position = weapon_root_base_position
 	weapon_root.rotation_degrees = Vector3(3.0, 8.0, 0.0)
 	camera.add_child(weapon_root)
+	var parts := build_gatling_viewmodel(weapon_root)
+	weapon_spin = parts["spin"]
+	weapon_muzzle = parts["muzzle"]
+	weapon_muzzle_flash = parts["flash"]
+	weapon_root.visible = false
 
+
+## Construye la gatling low-poly bajo `parent`, apuntando a -Z, y devuelve
+## {spin, muzzle, flash}. La usa el viewmodel en plano y las MANOS en VR (vr_hand).
+func build_gatling_viewmodel(parent: Node3D) -> Dictionary:
 	var tan_mat: StandardMaterial3D = _make_weapon_material(Color(0.62, 0.55, 0.42), Color(0.3, 0.25, 0.16), 0.28)
 	var tan_dark: StandardMaterial3D = _make_weapon_material(Color(0.42, 0.37, 0.28), Color(0.18, 0.15, 0.1), 0.2)
 	var dark_metal: StandardMaterial3D = _make_weapon_material(Color(0.12, 0.11, 0.1), Color(0.06, 0.05, 0.04), 0.12)
@@ -627,45 +636,42 @@ func _create_weapon_viewmodel() -> void:
 	var muzzle_glow: StandardMaterial3D = _make_weapon_material(Color(1.0, 0.66, 0.3), Color(1.0, 0.55, 0.2), 2.6)
 
 	# Rear housing / receiver and the motor block, plus grip and ammo drum.
-	_add_weapon_box(weapon_root, tan_mat, Vector3(0.2, 0.19, 0.26), Vector3(0.0, 0.0, 0.12))
-	_add_weapon_box(weapon_root, dark_metal, Vector3(0.07, 0.18, 0.12), Vector3(0.0, -0.16, 0.16), Vector3(16.0, 0.0, 0.0))
-	_add_weapon_box(weapon_root, tan_dark, Vector3(0.17, 0.17, 0.14), Vector3(-0.16, -0.04, 0.14))
-	_add_weapon_box(weapon_root, brass, Vector3(0.03, 0.03, 0.16), Vector3(-0.05, 0.02, 0.1), Vector3(0.0, 0.0, 26.0))
-	_add_weapon_cylinder(weapon_root, tan_mat, 0.11, 0.16, 6, Vector3(0.0, 0.0, -0.02))
+	_add_weapon_box(parent, tan_mat, Vector3(0.2, 0.19, 0.26), Vector3(0.0, 0.0, 0.12))
+	_add_weapon_box(parent, dark_metal, Vector3(0.07, 0.18, 0.12), Vector3(0.0, -0.16, 0.16), Vector3(16.0, 0.0, 0.0))
+	_add_weapon_box(parent, tan_dark, Vector3(0.17, 0.17, 0.14), Vector3(-0.16, -0.04, 0.14))
+	_add_weapon_box(parent, brass, Vector3(0.03, 0.03, 0.16), Vector3(-0.05, 0.02, 0.1), Vector3(0.0, 0.0, 26.0))
+	_add_weapon_cylinder(parent, tan_mat, 0.11, 0.16, 6, Vector3(0.0, 0.0, -0.02))
 
 	# Spinning barrel assembly mounted on the bore axis.
-	weapon_spin = Node3D.new()
-	weapon_spin.position = Vector3(0.0, 0.0, -0.12)
-	weapon_root.add_child(weapon_spin)
-	# Rear and front hub discs that carry the barrels (added first = drawn behind).
-	_add_weapon_cylinder(weapon_spin, tan_dark, 0.09, 0.05, 6, Vector3(0.0, 0.0, 0.0))
-	_add_weapon_cylinder(weapon_spin, dark_metal, 0.02, 0.62, 6, Vector3(0.0, 0.0, -0.32))
-	# Six longer barrels arranged in a ring around the bore so the cluster reads clearly.
+	var spin := Node3D.new()
+	spin.position = Vector3(0.0, 0.0, -0.12)
+	parent.add_child(spin)
+	_add_weapon_cylinder(spin, tan_dark, 0.09, 0.05, 6, Vector3(0.0, 0.0, 0.0))
+	_add_weapon_cylinder(spin, dark_metal, 0.02, 0.62, 6, Vector3(0.0, 0.0, -0.32))
 	for i in range(6):
 		var barrel_angle: float = TAU * float(i) / 6.0
 		var ring_offset: Vector3 = Vector3(cos(barrel_angle), sin(barrel_angle), 0.0) * 0.066
 		var barrel_material: StandardMaterial3D = tan_mat if i % 2 == 0 else tan_dark
-		_add_weapon_cylinder(weapon_spin, barrel_material, 0.024, 0.62, 6, ring_offset + Vector3(0.0, 0.0, -0.32))
-	# Front hub disc (added last = drawn over the barrels from the player's view).
-	_add_weapon_cylinder(weapon_spin, tan_mat, 0.092, 0.05, 6, Vector3(0.0, 0.0, -0.62))
+		_add_weapon_cylinder(spin, barrel_material, 0.024, 0.62, 6, ring_offset + Vector3(0.0, 0.0, -0.32))
+	_add_weapon_cylinder(spin, tan_mat, 0.092, 0.05, 6, Vector3(0.0, 0.0, -0.62))
 
 	# Muzzle marker (bullet origin) and a flash that pulses on every shot.
-	weapon_muzzle = Marker3D.new()
-	weapon_muzzle.position = Vector3(0.0, 0.0, -0.74)
-	weapon_root.add_child(weapon_muzzle)
-	weapon_muzzle_flash = MeshInstance3D.new()
+	var muzzle_marker := Marker3D.new()
+	muzzle_marker.position = Vector3(0.0, 0.0, -0.74)
+	parent.add_child(muzzle_marker)
+	var flash := MeshInstance3D.new()
 	var flash_mesh := SphereMesh.new()
 	flash_mesh.radius = 0.1
 	flash_mesh.height = 0.2
 	flash_mesh.radial_segments = 6
 	flash_mesh.rings = 3
-	weapon_muzzle_flash.mesh = flash_mesh
-	weapon_muzzle_flash.material_override = muzzle_glow
-	weapon_muzzle_flash.position = Vector3(0.0, 0.0, -0.76)
-	weapon_muzzle_flash.visible = false
-	weapon_root.add_child(weapon_muzzle_flash)
+	flash.mesh = flash_mesh
+	flash.material_override = muzzle_glow
+	flash.position = Vector3(0.0, 0.0, -0.76)
+	flash.visible = false
+	parent.add_child(flash)
 
-	weapon_root.visible = false
+	return {"spin": spin, "muzzle": muzzle_marker, "flash": flash}
 
 
 func _make_weapon_material(albedo: Color, emission: Color, emission_energy: float) -> StandardMaterial3D:

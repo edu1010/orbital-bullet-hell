@@ -27,6 +27,7 @@ var camera: XRCamera3D
 var left_hand: XRController3D
 var right_hand: XRController3D
 var ui_pointer: Node3D
+var ui_panel: Node3D  # lo asigna XRManager (el menú 2D en 3D)
 
 
 func _ready() -> void:
@@ -82,9 +83,12 @@ func _process(delta: float) -> void:
 		if absf(turn.x) > stick_deadzone:
 			player.call("apply_vr_turn", -turn.x * turn_speed * delta)
 
-	# El puntero del menú solo se ve fuera de partida.
+	# El menú 3D y el puntero solo se ven fuera de partida.
+	var playing: bool = manager.has_method("is_playing") and manager.is_playing()
 	if ui_pointer:
-		ui_pointer.visible = not (manager.has_method("is_playing") and manager.is_playing())
+		ui_pointer.visible = not playing
+	if ui_panel:
+		ui_panel.visible = not playing
 
 
 func _on_hand_button(action_name: String, hand: String) -> void:
@@ -92,14 +96,12 @@ func _on_hand_button(action_name: String, hand: String) -> void:
 		return
 	var playing: bool = manager.has_method("is_playing") and manager.is_playing()
 
-	# --- En el MENÚ (hasta tener el menú 2D en 3D): arrancar con el gatillo ---
-	# Gatillo derecho = partida normal, gatillo izquierdo = boss rush.
+	# --- En el MENÚ: el gatillo CLICA los botones del menú 3D (lo hace el puntero
+	# láser, vr_ui_pointer). El botón B/Y queda como atajo de emergencia para
+	# arrancar una partida normal por si el menú diera problemas.
 	if not playing:
-		if action_name == "trigger_click":
-			if hand == "left" and manager.has_method("start_boss_rush"):
-				manager.start_boss_rush()
-			elif manager.has_method("start_run"):
-				manager.start_run()
+		if action_name == "by_button" and manager.has_method("start_run"):
+			manager.start_run()
 		return
 
 	# --- En PARTIDA: acciones del jugador ---
