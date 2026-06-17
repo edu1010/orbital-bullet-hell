@@ -873,22 +873,10 @@ func _populate_leaderboard() -> void:
 		var old_leaderboard_row: Node = old_leaderboard_rows[child_index] as Node
 		if old_leaderboard_row:
 			old_leaderboard_row.queue_free()
+	# Sin rankings inventados: solo tu récord local real. La clasificación global
+	# (con avatar, nombre y filtro de amigos) vive en la versión de Steam.
 	var local_score: int = manager.high_score if manager else 0
-	var entries: Array[Dictionary] = [
-		{"name": "ENRI", "score": 32012, "local": false},
-		{"name": "CRUNCHY YOGURT", "score": 31837, "local": false},
-		{"name": "JO", "score": 31317, "local": false},
-		{"name": "CYTHIEL", "score": 31277, "local": false},
-		{"name": "EDU1010", "score": max(local_score, 0), "local": true},
-		{"name": "DEBANNER", "score": 31043, "local": false},
-		{"name": "SALLY", "score": 30791, "local": false},
-		{"name": "CHOGAN", "score": 30590, "local": false},
-		{"name": "SPICA", "score": 30248, "local": false},
-		{"name": "[___]", "score": 30240, "local": false},
-	]
-	entries.sort_custom(Callable(self, "_sort_score_desc"))
-	for i in range(entries.size()):
-		_add_leaderboard_row(i + 1, entries[i])
+	_add_leaderboard_row(1, {"name": "YOU", "score": max(local_score, 0), "local": true})
 
 
 func _sort_score_desc(a: Dictionary, b: Dictionary) -> bool:
