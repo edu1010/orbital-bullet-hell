@@ -57,8 +57,8 @@ func _make_controller(node_name: String, tracker: String) -> XRController3D:
 	var weapon := Node3D.new()
 	weapon.name = "Weapon"
 	weapon.set_script(VR_HAND)
+	weapon.set("manager", manager)  # ANTES de entrar al árbol (para que _ready lo vea)
 	controller.add_child(weapon)
-	weapon.set("manager", manager)
 	return controller
 
 

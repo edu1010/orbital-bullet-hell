@@ -2,9 +2,13 @@ extends Node3D
 ## Arma de cada mano VR: la MISMA gatling del juego (la construye el jugador con
 ## build_gatling_viewmodel), que gira y suelta fogonazo desde su cañón. AUTO-DISPARA
 ## mientras hay partida, hacia donde apunta la mano. Dos manos = dos cañones.
+##
+## La gatling se construye de forma DIFERIDA: el `manager`/`player` puede no estar
+## disponible aún en _ready (según el orden de init), así que se intenta cada frame
+## hasta que el jugador exista.
 
 @export var fire_rate := 6.0          # disparos por segundo de ESTA mano
-@export var projectile_speed := 90.0  # se iguala al del jugador si existe
+@export var projectile_speed := 90.0  # se iguala al del jugador
 @export var spin_speed := 18.0        # giro del cluster de cañones
 @export var model_scale := 0.6        # tamaño de la gatling en la mano
 
@@ -14,33 +18,37 @@ var _spin: Node3D
 var _flash: MeshInstance3D
 var _fire_timer := 0.0
 var _flash_timer := 0.0
+var _built := false
 
 
 func _ready() -> void:
-	_build_weapon()
-	if manager and manager.player and "projectile_speed" in manager.player:
-		projectile_speed = manager.player.projectile_speed
+	_try_build()
 
 
-func _build_weapon() -> void:
+func _try_build() -> void:
+	if _built:
+		return
+	if manager == null or manager.player == null:
+		return
+	if not manager.player.has_method("build_gatling_viewmodel"):
+		return
+	_built = true
 	var holder := Node3D.new()
 	holder.scale = Vector3.ONE * model_scale
 	holder.position = Vector3(0.0, 0.0, -0.04)
 	add_child(holder)
-	# Reutiliza la gatling real del juego.
-	if manager and manager.player and manager.player.has_method("build_gatling_viewmodel"):
-		var parts: Dictionary = manager.player.build_gatling_viewmodel(holder)
-		_spin = parts.get("spin")
-		muzzle = parts.get("muzzle")
-		_flash = parts.get("flash")
-	# Fallback si no hay jugador (no debería pasar): un marcador simple.
-	if muzzle == null:
-		muzzle = Marker3D.new()
-		muzzle.position = Vector3(0.0, 0.0, -0.4)
-		holder.add_child(muzzle)
+	var parts: Dictionary = manager.player.build_gatling_viewmodel(holder)
+	_spin = parts.get("spin")
+	muzzle = parts.get("muzzle")
+	_flash = parts.get("flash")
+	if "projectile_speed" in manager.player:
+		projectile_speed = manager.player.projectile_speed
 
 
 func _process(delta: float) -> void:
+	if not _built:
+		_try_build()
+		return
 	if _spin:
 		_spin.rotate_object_local(Vector3(0.0, 0.0, 1.0), spin_speed * delta)
 	if _flash:
