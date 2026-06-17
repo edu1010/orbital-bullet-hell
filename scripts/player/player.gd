@@ -197,7 +197,7 @@ func reset_for_run(start_position: Vector3) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not manager or not manager.is_playing():
 		return
-	if event is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
+	if event is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED and not vr_active:
 		rotate_object_local(Vector3.UP, -event.relative.x * mouse_sensitivity)
 		pitch = clamp(pitch - event.relative.y * mouse_sensitivity, -deg_to_rad(max_pitch_degrees), deg_to_rad(max_pitch_degrees))
 		head.rotation.x = pitch
@@ -226,7 +226,8 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	_constrain_to_sphere()
 	_update_enemy_platform()
-	_update_auto_fire(delta)
+	if not vr_active:
+		_update_auto_fire(delta)  # en VR disparan las dos manos (vr_hand.gd)
 	add_extra_charge(passive_charge_rate * delta)
 	_update_camera_feedback(delta)
 
@@ -235,7 +236,7 @@ func _process(delta: float) -> void:
 	if not weapon_root:
 		return
 	var showing: bool = manager != null and manager.is_playing()
-	weapon_root.visible = showing
+	weapon_root.visible = showing and not vr_active  # en VR las manos son las armas
 	if not showing:
 		return
 	if weapon_spin:
@@ -291,6 +292,22 @@ func _apply_arcade_movement(delta: float) -> void:
 	velocity = tangent_velocity + gravity_down * down_speed
 
 
+# --- Integración VR (la conduce el rig VR; en plano queda inerte) ---
+var vr_active := false
+var vr_move_input := Vector2.ZERO
+
+
+func apply_vr_turn(yaw_delta: float) -> void:
+	# Giro suave con el joystick derecho, igual que el yaw del mouse-look.
+	rotate_object_local(Vector3.UP, yaw_delta)
+
+
+func vr_jump() -> void:
+	if manager:
+		manager.dismiss_start_controls_hint()
+	jump_buffer_timer = jump_buffer_time
+
+
 func _read_move_input() -> Vector2:
 	var input := Vector2.ZERO
 	if Input.is_key_pressed(manager.get_bound_key("left", KEY_A)):
@@ -301,7 +318,11 @@ func _read_move_input() -> Vector2:
 		input.y -= 1.0
 	if Input.is_key_pressed(manager.get_bound_key("backward", KEY_S)):
 		input.y += 1.0
-	return input.normalized()
+	input = input.normalized()
+	input += vr_move_input  # joystick VR analógico (lo fija el rig cada frame)
+	if input.length() > 1.0:
+		input = input.normalized()
+	return input
 
 
 func _handle_jump_buffer() -> void:

@@ -1,24 +1,22 @@
 extends Node3D
-## Arma sujeta a un mando VR. Dispara con el gatillo reutilizando el sistema de
-## proyectiles del juego (GameManager.request_projectile), igual que el disparo
-## primario en plano. Se construye una malla primitiva como "arma".
+## Arma sujeta a un mando VR. Es "el arma principal del juego, pero en tu mano":
+## AUTO-DISPARA mientras hay partida (igual que el disparo primario automático),
+## hacia donde apunta la mano, reutilizando GameManager.request_projectile.
+## Con dos manos = dos cañones.
 
-@export var fire_action := "trigger_click"   # acción booleana del gatillo (OpenXR)
-@export var fire_rate := 7.0                 # disparos por segundo manteniendo el gatillo
-@export var projectile_speed := 90.0
+@export var fire_rate := 6.0          # disparos por segundo de ESTA mano
+@export var projectile_speed := 90.0  # se sobrescribe con el del jugador si existe
 
 var manager = null            # GameManager (sin tipo: llamada dinámica)
 var muzzle: Marker3D
-var _trigger_held := false
 var _fire_timer := 0.0
 
 
 func _ready() -> void:
 	_build_weapon()
-	var controller := get_parent()
-	if controller and controller.has_signal("button_pressed"):
-		controller.connect("button_pressed", _on_button_pressed)
-		controller.connect("button_released", _on_button_released)
+	# Igualar la velocidad de proyectil a la del jugador para un feel idéntico.
+	if manager and manager.player and "projectile_speed" in manager.player:
+		projectile_speed = manager.player.projectile_speed
 
 
 func _build_weapon() -> void:
@@ -40,7 +38,8 @@ func _build_weapon() -> void:
 
 
 func _process(delta: float) -> void:
-	if not _trigger_held:
+	if not _is_playing():
+		_fire_timer = 0.0
 		return
 	_fire_timer += delta
 	var interval: float = 1.0 / max(0.1, fire_rate)
@@ -49,15 +48,8 @@ func _process(delta: float) -> void:
 		_fire()
 
 
-func _on_button_pressed(action_name: String) -> void:
-	if action_name == fire_action:
-		_trigger_held = true
-		_fire_timer = 1.0 / max(0.1, fire_rate)  # dispara de inmediato
-
-
-func _on_button_released(action_name: String) -> void:
-	if action_name == fire_action:
-		_trigger_held = false
+func _is_playing() -> bool:
+	return manager != null and manager.has_method("is_playing") and manager.is_playing()
 
 
 func _fire() -> void:

@@ -2,20 +2,32 @@ extends XROrigin3D
 ## Rig de VR construido por código (encaja con el estilo del proyecto: todo
 ## generado, sin .tscn frágiles).
 ##
-##   XROrigin3D (este nodo)
+##   XROrigin3D (este nodo, colgado del Player)
 ##    ├─ XRCamera3D        -> el casco
-##    ├─ LeftHand  (XRController3D "left_hand")  -> Weapon (vr_hand.gd)
+##    ├─ LeftHand  (XRController3D "left_hand")  -> Weapon (vr_hand.gd, auto-dispara)
 ##    └─ RightHand (XRController3D "right_hand") -> Weapon (vr_hand.gd) + UIPointer
 ##
-## `manager` (GameManager) se asigna desde XRManager antes de entrar al árbol.
+## Controles (mismo juego, ahora en VR):
+##   - Joystick IZQUIERDO  -> moverte por la esfera (alimenta el input del jugador)
+##   - Joystick DERECHO X  -> girar (giro suave, como el mouse-look)
+##   - Botón A/X           -> saltar
+##   - Las dos manos AUTO-DISPARAN mientras juegas (vr_hand.gd)
+##
+## `manager` (GameManager) lo asigna XRManager antes de entrar al árbol.
 
 const VR_HAND := preload("res://scripts/vr/vr_hand.gd")
 const VR_POINTER := preload("res://scripts/vr/vr_ui_pointer.gd")
+
+@export var turn_speed := 2.6        # rad/s del giro suave
+@export var stick_deadzone := 0.15
+@export var jump_action := "ax_button"   # A / X
 
 var manager = null
 var camera: XRCamera3D
 var left_hand: XRController3D
 var right_hand: XRController3D
+var ui_pointer: Node3D
+
 
 func _ready() -> void:
 	camera = XRCamera3D.new()
@@ -26,10 +38,14 @@ func _ready() -> void:
 	right_hand = _make_controller("RightHand", "right_hand")
 
 	# Puntero láser para el menú, en la mano derecha.
-	var pointer := Node3D.new()
-	pointer.name = "UIPointer"
-	pointer.set_script(VR_POINTER)
-	right_hand.add_child(pointer)
+	ui_pointer = Node3D.new()
+	ui_pointer.name = "UIPointer"
+	ui_pointer.set_script(VR_POINTER)
+	right_hand.add_child(ui_pointer)
+
+	# Salto con A/X en cualquiera de las dos manos.
+	left_hand.connect("button_pressed", _on_hand_button)
+	right_hand.connect("button_pressed", _on_hand_button)
 
 
 func _make_controller(node_name: String, tracker: String) -> XRController3D:
@@ -43,3 +59,36 @@ func _make_controller(node_name: String, tracker: String) -> XRController3D:
 	controller.add_child(weapon)
 	weapon.set("manager", manager)
 	return controller
+
+
+func _process(delta: float) -> void:
+	if manager == null:
+		return
+	var player = manager.player
+	if player == null:
+		return
+	player.set("vr_active", true)
+
+	# Locomoción: joystick izquierdo. Convención del juego: y+ = atrás.
+	if left_hand:
+		var move: Vector2 = left_hand.get_vector2("primary")
+		if move.length() < stick_deadzone:
+			move = Vector2.ZERO
+		player.set("vr_move_input", Vector2(move.x, -move.y))
+
+	# Giro suave: eje X del joystick derecho.
+	if right_hand:
+		var turn: Vector2 = right_hand.get_vector2("primary")
+		if absf(turn.x) > stick_deadzone:
+			player.call("apply_vr_turn", -turn.x * turn_speed * delta)
+
+	# El puntero del menú solo se ve fuera de partida.
+	if ui_pointer:
+		ui_pointer.visible = not (manager.has_method("is_playing") and manager.is_playing())
+
+
+func _on_hand_button(action_name: String) -> void:
+	if action_name != jump_action:
+		return
+	if manager and manager.player and manager.player.has_method("vr_jump"):
+		manager.player.vr_jump()
