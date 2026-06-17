@@ -12,6 +12,8 @@ extends Node3D
 @export var spin_speed := 18.0        # giro del cluster de cañones
 @export var model_scale := 0.6        # tamaño de la gatling en la mano
 
+const VR_CHARGE_RING := preload("res://scripts/vr/vr_charge_ring.gd")
+
 var manager = null            # GameManager (sin tipo: llamada dinámica)
 var muzzle: Marker3D
 var _spin: Node3D
@@ -43,6 +45,12 @@ func _try_build() -> void:
 	_flash = parts.get("flash")
 	if "projectile_speed" in manager.player:
 		projectile_speed = manager.player.projectile_speed
+
+	# HUD radial (HP + cargas de extra/escudo/impulso) en world-space, junto al cañón.
+	var ring := VR_CHARGE_RING.new()
+	ring.set("manager", manager)  # antes de add_child
+	ring.position = Vector3(0.0, 0.06, -0.18)
+	add_child(ring)
 
 
 func _process(delta: float) -> void:
