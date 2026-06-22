@@ -6,8 +6,9 @@ extends Node3D
 
 const RADIAL_HUD := preload("res://scripts/ui/radial_hud.gd")
 
-@export var size_meters := 0.16    # diámetro del disco
-@export var resolution := 180      # px del SubViewport
+@export var size_meters := 0.24    # diámetro del disco
+@export var resolution := 288      # px del SubViewport
+@export var tilt_degrees := -30.0  # inclinación hacia la cara del jugador
 
 var manager = null
 var viewport: SubViewport
@@ -20,6 +21,7 @@ func _ready() -> void:
 	viewport.size = Vector2i(resolution, resolution)
 	viewport.transparent_bg = true
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	viewport.msaa_2d = Viewport.MSAA_4X  # suaviza los arcos finos
 	add_child(viewport)
 
 	hud = RADIAL_HUD.new()
@@ -36,9 +38,13 @@ func _ready() -> void:
 	mat.albedo_texture = viewport.get_texture()
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED  # mira siempre a la cámara
-	mat.billboard_keep_scale = true
+	# Dibuja SOBRE el arma (la gatling usa no_depth_test/render_priority=2).
+	mat.no_depth_test = true
+	mat.render_priority = 3
 	quad.material_override = mat
+	# En vez de billboard completo (descoloca el disco), queda fijo en la punta
+	# del arma, inclinado hacia la cara del jugador para leerse bien.
+	quad.rotation_degrees = Vector3(tilt_degrees, 0.0, 0.0)
 	add_child(quad)
 
 	if manager and manager.player and hud.has_method("configure"):

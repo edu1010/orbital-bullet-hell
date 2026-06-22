@@ -49,7 +49,7 @@ func _try_build() -> void:
 	# HUD radial (HP + cargas de extra/escudo/impulso) en world-space, junto al cañón.
 	var ring := VR_CHARGE_RING.new()
 	ring.set("manager", manager)  # antes de add_child
-	ring.position = Vector3(0.0, 0.06, -0.18)
+	ring.position = Vector3(0.0, 0.10, -0.46)  # en la punta de los cañones, sobre la línea de tiro
 	add_child(ring)
 
 
